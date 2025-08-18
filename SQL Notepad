@@ -156,8 +156,6 @@
 
     <button id="clearBtn"      class="secondary" title="Clear the Copy Board">Clear Copy Board</button>
     <button id="importBtn"     class="secondary" title="Import text from system clipboard">Import Clipboard</button>
-    <button id="saveBtn"       class="secondary" title="Save Copy Board to localStorage">Save</button>
-    <button id="loadBtn"       class="secondary" title="Load Copy Board from localStorage">Load</button>
 
     <button id="tokenizeBtn"   title="Replace last field in every tuple with a unique token">Tokenizer</button>
     <button id="nthFieldRemover" title="Remove the n’th field (1-based) from every tuple">Remove n’th Field</button>
