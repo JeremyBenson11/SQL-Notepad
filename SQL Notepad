@@ -1,0 +1,996 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<title>SQL Notepad</title>
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<style>
+  :root {
+    --bg:#0f172a;
+    --bg2:#0b1327;
+    --panel:#0d1326;
+    --editor:#0b1020;
+    --fg:#e5e7eb;
+    --muted:#94a3b8;
+    --border:#1f2a44;
+    --accent:#d9534f;
+    --accent-hover:#c9302c;
+    --pill:#111827;
+  }
+  [data-theme="light"] {
+    --bg:#f8fafc;
+    --bg2:#eef2f7;
+    --panel:#ffffff;
+    --editor:#ffffff;
+    --fg:#0f172a;
+    --muted:#475569;
+    --border:#d1d5db;
+    --accent:#0ea5e9;
+    --accent-hover:#0284c7;
+    --pill:#e5e7eb;
+  }
+
+  * { box-sizing: border-box; }
+  html, body { height: 100%; margin: 0; }
+  body {
+    font-family: Arial, sans-serif;
+    display: grid;
+    grid-template-rows: auto auto 1fr;
+    background: var(--bg);
+    color: var(--fg);
+  }
+
+  header {
+    padding: 16px 20px;
+    background: var(--bg);
+    border-bottom: 1px solid var(--border);
+  }
+  header h1 { margin: 0 0 6px; font-size: 20px; }
+  header p { margin: 0; font-size: 14px; color: var(--muted); }
+  kbd {
+    background: var(--pill);
+    border: 1px solid var(--border);
+    border-bottom-width: 2px;
+    border-radius: 6px;
+    padding: 2px 6px;
+    font-family: inherit;
+    font-size: 12px;
+    color: var(--fg);
+  }
+
+  .bar {
+    display:flex; gap:8px; align-items:center; padding:8px 20px;
+    background: var(--bg2); color: var(--fg);
+    border-bottom:1px solid var(--border);
+    flex-wrap: wrap;
+  }
+  .pill {
+    background: var(--pill);
+    padding: 4px 8px;
+    border-radius: 999px;
+    font-size: 12px;
+    border: 1px solid var(--border);
+  }
+  .bar button {
+    padding:8px 10px; font-size:14px; cursor:pointer; border:none; color:white;
+    background: var(--accent); border-radius:8px;
+  }
+  .bar button.secondary {
+    background: transparent; color: var(--fg);
+    border: 1px solid var(--border);
+  }
+  .bar button:hover { background: var(--accent-hover); }
+  .bar button.secondary:hover { background: var(--panel); }
+
+  .wrap {
+    display:grid; grid-template-columns: 300px 1fr; gap:0; height: 100%;
+  }
+  .wrap.board-hidden { grid-template-columns: 1fr; }
+  aside.panel {
+    background: var(--panel); border-right:1px solid var(--border);
+    display:flex; flex-direction:column;
+  }
+  aside.panel.hidden { display:none; }
+  aside.panel h2 { margin: 12px 12px 4px; font-size:14px; color: var(--fg); font-weight:600; }
+  aside.panel small { margin: 0 12px 8px; color: var(--muted); }
+  #board {
+    margin: 0 12px 12px; flex:1; resize:none; width: calc(100% - 24px);
+    background: var(--editor); color: var(--fg); border:1px solid var(--border);
+    border-radius:8px; padding:10px;
+    font-family: ui-monospace, Menlo, Consolas, monospace; font-size:13px; line-height:1.4;
+  }
+  .panel .row { display:flex; gap:8px; padding:0 12px 12px; }
+  .panel .row button { flex:1; }
+
+  textarea#textArea {
+    width: 100%; height: 100%;
+    font-size: 16px; padding: 14px; border: none; outline: none;
+    background: var(--editor); color: var(--fg);
+    font-family: ui-monospace, Menlo, Consolas, monospace;
+  }
+
+  /* Modal shared styles */
+  .overlay {
+    position: fixed; inset: 0; background: rgba(0,0,0,0.5);
+    display: none; align-items: center; justify-content: center; z-index: 9999;
+  }
+  .dialog {
+    width: 640px; max-width: 95%; padding: 16px;
+    border-radius: 12px; background: var(--panel); color: var(--fg);
+    border: 1px solid var(--border); font-family: Arial, sans-serif;
+    box-shadow: 0 10px 30px rgba(0,0,0,0.35);
+  }
+  .dialog .title { font-size: 16px; font-weight: 700; margin-bottom: 6px; }
+  .dialog .hint { font-size: 13px; color: var(--muted); margin-bottom: 10px; }
+  .dialog .row { display:flex; flex-wrap:wrap; gap:10px; margin-bottom:12px; }
+  .dialog label { font-size: 14px; display:flex; align-items:center; gap:6px; }
+  .dialog input[type="number"], .dialog select {
+    padding: 8px; border-radius: 8px; border: 1px solid var(--border);
+    background: var(--editor); color: var(--fg);
+  }
+  .dialog .btns { display:flex; gap:8px; justify-content:flex-end; margin-top: 8px; }
+  .dialog button {
+    padding:10px 12px; border-radius:8px; cursor:pointer;
+    border:1px solid var(--border); background: var(--bg2); color: var(--fg);
+  }
+  .dialog button.primary { border:none; background: var(--accent); color:#fff; }
+  .dialog button.primary:hover { background: var(--accent-hover); }
+
+  .divider { height:1px; background: var(--border); margin: 12px 0; }
+</style>
+</head>
+<body data-theme="dark">
+  <header>
+    <h1>SQL Notepad</h1>
+    <p>
+      <kbd>Ctrl</kbd>+<kbd>A</kbd> collect selection •
+      <kbd>Ctrl</kbd>+<kbd>I</kbd> dump into n’th field •
+      <kbd>Ctrl</kbd>+<kbd>D</kbd> duplicate line •
+      <kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>V</kbd> import clipboard
+    </p>
+  </header>
+
+  <div class="bar">
+    <span class="pill" id="countPill">Copy Board: 0 items</span>
+    <span class="pill" id="parsePill" title="How text was tokenized">Parsing: Auto</span>
+
+    <button id="clearBtn"      class="secondary" title="Clear the Copy Board">Clear Copy Board</button>
+    <button id="importBtn"     class="secondary" title="Import text from system clipboard">Import Clipboard</button>
+    <button id="saveBtn"       class="secondary" title="Save Copy Board to localStorage">Save</button>
+    <button id="loadBtn"       class="secondary" title="Load Copy Board from localStorage">Load</button>
+
+    <button id="tokenizeBtn"   title="Replace last field in every tuple with a unique token">Tokenizer</button>
+    <button id="nthFieldRemover" title="Remove the n’th field (1-based) from every tuple">Remove n’th Field</button>
+    <button id="mathButton"    title="Open math tools for field operations">Math</button>
+
+    <span style="flex:1"></span>
+
+    <button id="toggleBoardBtn" class="secondary" title="Hide/Show Copy Board">Hide Copy Board</button>
+    <button id="themeToggleBtn" class="secondary" title="Toggle theme">Light Theme</button>
+  </div>
+
+  <div class="wrap" id="mainWrap">
+    <aside class="panel" id="leftPanel">
+      <h2>Copy Board</h2>
+      <small>Paste here (CSV, lines, or whitespace). Edits update the queue.</small>
+      <textarea id="board" placeholder='Examples:
+alpha, "New York", bravo
+or one
+per
+line'></textarea>
+      <div class="row">
+        <button id="dedupeBtn" class="secondary">Dedupe</button>
+        <button id="shuffleBtn" class="secondary">Shuffle</button>
+      </div>
+    </aside>
+
+    <textarea id="textArea" placeholder="Paste or type SQL here…"></textarea>
+  </div>
+
+  <!-- Remove n’th Field Modal -->
+  <div class="overlay" id="nth-remover-modal">
+    <div class="dialog">
+      <div class="title">Remove n’th Field</div>
+      <div class="hint">Enter a <b>1-based</b> field index (1 = first field). Removes that field from all tuples.</div>
+      <div class="row">
+        <label>Field #
+          <input type="number" id="nthIndexInput" min="1" value="1" style="width:90px;">
+        </label>
+      </div>
+      <div class="btns">
+        <button id="nthCancelBtn">Cancel</button>
+        <button id="nthApplyBtn" class="primary">Remove Field</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Math Modal -->
+  <div class="overlay" id="math-modal">
+    <div class="dialog">
+      <div class="title">SQL Field Math</div>
+
+      <div class="hint">Result: <b>Target = Number (op) Source</b> · Fields are <b>1-based</b> · Flip → <b>Source (op) Number</b></div>
+      <div class="row" id="interfieldRow"></div>
+      <div class="btns">
+        <button id="applyInterfieldBtn" class="primary">Apply Interfield</button>
+      </div>
+
+      <div class="divider"></div>
+
+      <div class="hint">Result: <b>Field = Field (op) Number</b> · Fields are <b>1-based</b> · Optional Flip → <b>Number (op) Field</b></div>
+      <div class="row" id="fieldRow"></div>
+      <div class="btns">
+        <button id="applyFieldBtn" class="primary">Apply Field</button>
+        <button id="mathCloseBtn">Close</button>
+      </div>
+    </div>
+  </div>
+
+<script>
+/* ============================
+   Persistent UI state (theme & panel)
+============================ */
+const THEME_KEY = 'sqlFieldDump.theme';
+const BOARD_VIS_KEY = 'sqlFieldDump.boardCollapsed';
+
+function applyTheme(theme) {
+  document.body.setAttribute('data-theme', theme);
+  const themeBtn = document.getElementById('themeToggleBtn');
+  if (themeBtn) themeBtn.textContent = (theme === 'dark') ? 'Light Theme' : 'Dark Theme';
+}
+function toggleTheme() {
+  const current = document.body.getAttribute('data-theme') || 'dark';
+  const next = current === 'dark' ? 'light' : 'dark';
+  applyTheme(next);
+  localStorage.setItem(THEME_KEY, next);
+}
+(function initTheme() {
+  const saved = localStorage.getItem(THEME_KEY);
+  applyTheme(saved || 'dark');
+})();
+
+function applyBoardVisibility(collapsed) {
+  const wrap = document.getElementById('mainWrap');
+  const panel = document.getElementById('leftPanel');
+  const btn = document.getElementById('toggleBoardBtn');
+  if (collapsed) {
+    wrap.classList.add('board-hidden');
+    panel.classList.add('hidden');
+    if (btn) btn.textContent = 'Show Copy Board';
+  } else {
+    wrap.classList.remove('board-hidden');
+    panel.classList.remove('hidden');
+    if (btn) btn.textContent = 'Hide Copy Board';
+  }
+}
+function toggleBoard() {
+  const collapsed = localStorage.getItem(BOARD_VIS_KEY) === 'true';
+  const next = !collapsed;
+  applyBoardVisibility(next);
+  localStorage.setItem(BOARD_VIS_KEY, String(next));
+}
+(function initBoardVis() {
+  const collapsed = localStorage.getItem(BOARD_VIS_KEY) === 'true';
+  applyBoardVisibility(collapsed);
+})();
+
+document.getElementById('themeToggleBtn').addEventListener('click', toggleTheme);
+document.getElementById('toggleBoardBtn').addEventListener('click', toggleBoard);
+
+/* ============================
+   Elements & Copy Board state
+============================ */
+const collectedItems = [];
+const textArea   = document.getElementById('textArea');
+const boardArea  = document.getElementById('board');
+const countPill  = document.getElementById('countPill');
+const parsePill  = document.getElementById('parsePill');
+
+function updateBoardView() {
+  if (boardArea) boardArea.value = collectedItems.join('\n');
+  if (countPill) {
+    countPill.textContent = `Copy Board: ${collectedItems.length} item${collectedItems.length===1?'':'s'}`;
+  }
+}
+function setParseModeLabel(mode) {
+  if (parsePill) parsePill.textContent = `Parsing: ${mode}`;
+}
+
+/* ============================
+   CSV-aware tokenization
+============================ */
+function hasCsvCommaOutsideQuotes(s) {
+  let inQ = false;
+  for (let i = 0; i < s.length; i++) {
+    const ch = s[i];
+    if (ch === '"') {
+      if (inQ && s[i+1] === '"') { i++; }
+      else { inQ = !inQ; }
+    } else if (!inQ && ch === ',') {
+      return true;
+    }
+  }
+  return false;
+}
+function csvSplit(s) {
+  const out = [];
+  let buf = '';
+  let inQ = false;
+  for (let i = 0; i < s.length; i++) {
+    const ch = s[i];
+    if (ch === '"') {
+      if (inQ && s[i+1] === '"') { buf += '"'; i++; }
+      else { inQ = !inQ; }
+    } else if (ch === ',' && !inQ) {
+      out.push(buf.trim());
+      buf = '';
+    } else {
+      buf += ch;
+    }
+  }
+  out.push(buf.trim());
+  return out.map(v => {
+    if (v.startsWith('"') && v.endsWith('"')) return v.slice(1, -1);
+    return v;
+  }).filter(Boolean);
+}
+function tokenizeAuto(input) {
+  const text = input.replace(/\r/g, '');
+  if (hasCsvCommaOutsideQuotes(text)) {
+    setParseModeLabel('CSV');
+    const lines = text.split('\n').filter(l => l.trim().length);
+    const items = [];
+    for (const line of lines) items.push(...csvSplit(line));
+    return items.filter(Boolean);
+  }
+  if (text.includes('\n')) {
+    setParseModeLabel('Lines');
+    return text.split('\n').map(s => s.trim()).filter(Boolean);
+  }
+  setParseModeLabel('Whitespace');
+  return text.split(/\s+/).map(s => s.trim()).filter(Boolean);
+}
+function pushItemsAuto(input) {
+  const items = tokenizeAuto(input);
+  if (items.length) {
+    collectedItems.push(...items);
+    updateBoardView();
+  }
+}
+function syncFromBoard() {
+  const items = tokenizeAuto(boardArea.value);
+  collectedItems.length = 0;
+  collectedItems.push(...items);
+  updateBoardView();
+}
+boardArea.addEventListener('input', syncFromBoard);
+
+/* ============================
+   Buttons
+============================ */
+const clearBtn     = document.getElementById('clearBtn');
+const importBtn    = document.getElementById('importBtn');
+const saveBtn      = document.getElementById('saveBtn');
+const loadBtn      = document.getElementById('loadBtn');
+const dedupeBtn    = document.getElementById('dedupeBtn');
+const shuffleBtn   = document.getElementById('shuffleBtn');
+const tokenizeBtn  = document.getElementById('tokenizeBtn');
+
+clearBtn.addEventListener('click', () => {
+  collectedItems.length = 0;
+  updateBoardView();
+});
+importBtn.addEventListener('click', async () => {
+  try {
+    const txt = await navigator.clipboard.readText();
+    pushItemsAuto(txt);
+  } catch {
+    alert('Clipboard read failed. Your browser may not allow it on this page.');
+  }
+});
+saveBtn.addEventListener('click', () => {
+  localStorage.setItem('sqlFieldDump.copyBoard', JSON.stringify(collectedItems));
+});
+loadBtn.addEventListener('click', () => {
+  const raw = localStorage.getItem('sqlFieldDump.copyBoard');
+  if (!raw) return;
+  try {
+    const arr = JSON.parse(raw);
+    if (Array.isArray(arr)) {
+      collectedItems.length = 0;
+      collectedItems.push(...arr.map(String));
+      updateBoardView();
+    }
+  } catch {}
+});
+dedupeBtn.addEventListener('click', () => {
+  const seen = new Set(), next = [];
+  for (const it of collectedItems) if (!seen.has(it)) { seen.add(it); next.push(it); }
+  collectedItems.length = 0; collectedItems.push(...next); updateBoardView();
+});
+shuffleBtn.addEventListener('click', () => {
+  for (let i = collectedItems.length - 1; i > 0; i++) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [collectedItems[i], collectedItems[j]] = [collectedItems[j]], [collectedItems[i]];
+  }
+  updateBoardView();
+});
+
+/* ============================
+   Caret/line utilities
+============================ */
+function getLineIndexAndColumn(text, caretPos) {
+  const lines = text.split(/\r?\n/);
+  let acc = 0;
+  for (let i = 0; i < lines.length; i++) {
+    const len = lines[i].length;
+    if (caretPos <= acc + len) {
+      return { lines, lineIndex: i, column: caretPos - acc };
+    }
+    acc += len + 1; // +1 for '\n'
+  }
+  return { lines, lineIndex: lines.length - 1, column: lines[lines.length - 1].length };
+}
+
+/* ============================
+   Robust tuple parsing
+   - Handles quotes, '' and backslash-escaped \'
+============================ */
+function findAllTuplesInLineSmart(line) {
+  const tuples = [];
+  let inQuote = false;
+
+  for (let i = 0; i < line.length; i++) {
+    const ch = line[i];
+
+    if (ch === "'") {
+      if (inQuote) {
+        if (line[i - 1] === '\\') {
+          // escaped
+        } else if (line[i + 1] === "'") {
+          i++;
+        } else {
+          inQuote = false;
+        }
+      } else {
+        inQuote = true;
+      }
+    } else if (ch === '\\' && inQuote) {
+      i++;
+    } else if (!inQuote && ch === '(') {
+      const start = i;
+      let j = i + 1;
+      let depth = 1;
+      let q = false;
+      for (; j < line.length; j++) {
+        const c2 = line[j];
+        if (c2 === "'") {
+          if (q) {
+            if (line[j - 1] === '\\') {
+              // escaped
+            } else if (line[j + 1] === "'") {
+              j++;
+            } else {
+              q = false;
+            }
+          } else {
+            q = true;
+          }
+        } else if (c2 === '\\' && q) {
+          j++;
+        } else if (!q) {
+          if (c2 === '(') depth++;
+          else if (c2 === ')') {
+            depth--;
+            if (depth === 0) {
+              tuples.push({ open: start, close: j + 1, raw: line.slice(start, j + 1) });
+              i = j;
+              break;
+            }
+          }
+        }
+      }
+    }
+  }
+  return tuples;
+}
+
+function splitFieldsRobust(tupleRaw) {
+  const inner = tupleRaw.slice(1, -1);
+  const parts = [];
+  let buf = '';
+  let inQuote = false;
+
+  for (let i = 0; i < inner.length; i++) {
+    const ch = inner[i];
+
+    if (ch === "'") {
+      if (inQuote) {
+        if (inner[i - 1] === '\\') {
+          buf += ch;
+        } else if (inner[i + 1] === "'") {
+          buf += "''"; i++;
+        } else {
+          inQuote = false; buf += ch;
+        }
+      } else {
+        inQuote = true; buf += ch;
+      }
+    } else if (ch === '\\' && inQuote) {
+      buf += ch;
+      if (i + 1 < inner.length) { buf += inner[i + 1]; i++; }
+    } else if (!inQuote && ch === ',') {
+      parts.push(buf.trim()); buf = '';
+    } else {
+      buf += ch;
+    }
+  }
+  parts.push(buf.trim());
+  return parts;
+}
+function joinFields(parts) { return '(' + parts.join(', ') + ')'; }
+function isQuoted(str) { const t = str.trim(); return t.startsWith("'") && t.endsWith("'"); }
+
+/* ============================
+   Insert collected items (Ctrl+I) – does NOT consume board
+============================ */
+function countCommasBeforeIndexRobust(line, tupleOpen, indexInLine) {
+  const start = tupleOpen + 1;
+  const end   = Math.max(start, Math.min(indexInLine, line.length));
+  let inQuote = false, commas = 0;
+
+  for (let i = start; i < end; i++) {
+    const ch = line[i];
+    if (ch === "'") {
+      if (inQuote) {
+        if (line[i - 1] === '\\') {
+          // escaped
+        } else if (line[i + 1] === "'") {
+          i++;
+        } else {
+          inQuote = false;
+        }
+      } else {
+        inQuote = true;
+      }
+    } else if (ch === '\\' && inQuote) {
+      i++;
+    } else if (!inQuote && ch === ',') {
+      commas++;
+    }
+  }
+  return commas;
+}
+
+document.addEventListener('keydown', function (event) {
+  // Collect: Ctrl+A (only when focused in main editor)
+  if (event.ctrlKey && event.key.toLowerCase() === 'a' && document.activeElement === textArea) {
+    event.preventDefault();
+
+    const start = textArea.selectionStart;
+    const end   = textArea.selectionEnd;
+    if (start === end) return;
+
+    const selectedText = textArea.value.substring(start, end);
+    pushItemsAuto(selectedText);
+
+    const before = textArea.value.substring(0, start);
+    const after  = textArea.value.substring(end);
+    textArea.value = before + after;
+    textArea.setSelectionRange(start, start);
+    return;
+  }
+
+  // Import: Ctrl+Shift+V
+  if (event.ctrlKey && event.shiftKey && event.key.toLowerCase() === 'v' &&
+      (document.activeElement === textArea || document.activeElement === boardArea)) {
+    event.preventDefault();
+    navigator.clipboard.readText().then(pushItemsAuto).catch(() => alert('Clipboard read failed.'));
+    return;
+  }
+
+  // Dump: Ctrl+I
+  if (event.ctrlKey && event.key.toLowerCase() === 'i' && document.activeElement === textArea) {
+    event.preventDefault();
+    if (collectedItems.length === 0) return;
+
+    const caretPos = textArea.selectionStart;
+    const info     = getLineIndexAndColumn(textArea.value, caretPos);
+    const lines    = info.lines;
+    const startLine= info.lineIndex;
+    const column   = info.column;
+
+    // Determine field index from caret position on startLine
+    const tupOnCaret = findAllTuplesInLineSmart(lines[startLine])[0] || null;
+    if (!tupOnCaret) return;
+
+    let fieldIndex = 0;
+    if (column <= tupOnCaret.open) fieldIndex = 0;
+    else if (column >= tupOnCaret.close) {
+      const parts = splitFieldsRobust(tupOnCaret.raw);
+      fieldIndex = Math.max(0, parts.length - 1);
+    } else {
+      fieldIndex = countCommasBeforeIndexRobust(lines[startLine], tupOnCaret.open, column);
+    }
+
+    let used = 0;
+    for (let li = startLine; li < lines.length && used < collectedItems.length; li++) {
+      const line = lines[li];
+      if (line.trim() === '') break;
+
+      const tuples = findAllTuplesInLineSmart(line);
+      if (!tuples.length) continue;
+
+      // Replace first tuple on the line at that field
+      const t = tuples[0];
+      const before = line.slice(0, t.open);
+      const after  = line.slice(t.close);
+
+      const parts = splitFieldsRobust(t.raw);
+      if (fieldIndex < 0 || fieldIndex >= parts.length) continue;
+
+      const target = parts[fieldIndex];
+      const value  = collectedItems[used++];
+
+      parts[fieldIndex] = isQuoted(target) ? `'${String(value).replace(/'/g, "''")}'`
+                                           : String(value);
+
+      lines[li] = before + joinFields(parts) + after;
+    }
+
+    textArea.value = lines.join('\n');
+    textArea.setSelectionRange(caretPos, caretPos);
+    updateBoardView();
+    return;
+  }
+
+  // Duplicate line: Ctrl+D
+  if (event.ctrlKey && event.key.toLowerCase() === 'd' && document.activeElement === textArea) {
+    event.preventDefault();
+    const pos = textArea.selectionStart;
+    const { lines, lineIndex, column } = getLineIndexAndColumn(textArea.value, pos);
+    const line = lines[lineIndex];
+    lines.splice(lineIndex, 0, line);
+    textArea.value = lines.join('\n');
+
+    let acc = 0;
+    for (let i = 0; i < lineIndex; i++) acc += lines[i].length + 1;
+    const newCaret = acc + Math.min(column, line.length);
+    textArea.setSelectionRange(newCaret, newCaret);
+    return;
+  }
+});
+
+/* ============================
+   Tokenizer – last field -> unique 'Token'
+============================ */
+function generateToken(length) {
+  const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz';
+  let token = '';
+  for (let i = 0; i < length; i++) token += chars.charAt(Math.floor(Math.random() * chars.length));
+  return token;
+}
+function getUniqueToken(existingContent, length) {
+  let token;
+  do { token = generateToken(length); } while (existingContent.includes(token));
+  return token;
+}
+function replaceLastFieldWithQuotedToken(tupleRaw, token) {
+  const parts = splitFieldsRobust(tupleRaw);
+  if (parts.length === 0) return tupleRaw;
+  parts[parts.length - 1] = `'${String(token).replace(/'/g, "''")}'`;
+  return joinFields(parts);
+}
+tokenizeBtn.addEventListener('click', () => {
+  if (!textArea) return;
+  let content = textArea.value;
+  const lines = content.split(/\r?\n/);
+
+  for (let li = 0; li < lines.length; li++) {
+    const line = lines[li];
+    if (!line.trim()) continue;
+
+    const tuples = findAllTuplesInLineSmart(line);
+    if (!tuples.length) continue;
+
+    let newLine = line;
+    for (let k = tuples.length - 1; k >= 0; k--) {
+      const t = tuples[k];
+      const token = getUniqueToken(content, 12);
+
+      const before = newLine.slice(0, t.open);
+      const after  = newLine.slice(t.close);
+      const replacedTuple = replaceLastFieldWithQuotedToken(t.raw, token);
+      newLine = before + replacedTuple + after;
+
+      // update whole doc snapshot to keep tokens unique
+      const docPrefixLen = lines.slice(0, li).join('\\n').length + (li > 0 ? 1 : 0);
+      const beforeDoc = content.slice(0, docPrefixLen);
+      const afterDoc  = content.slice(docPrefixLen + line.length);
+      content = beforeDoc + newLine + afterDoc;
+    }
+    lines[li] = newLine;
+  }
+  textArea.value = lines.join('\n');
+});
+
+/* ============================
+   Remove n’th Field (1-based UI)
+============================ */
+const nthModal      = document.getElementById('nth-remover-modal');
+const nthInput      = document.getElementById('nthIndexInput');
+const nthApplyBtn   = document.getElementById('nthApplyBtn');
+const nthCancelBtn  = document.getElementById('nthCancelBtn');
+document.getElementById('nthFieldRemover').addEventListener('click', () => {
+  nthModal.style.display = 'flex';
+  setTimeout(() => nthInput.focus(), 0);
+});
+nthCancelBtn.addEventListener('click', () => nthModal.style.display = 'none');
+nthModal.addEventListener('click', (e) => { if (e.target === nthModal) nthCancelBtn.click(); });
+
+function removeFieldInTuple(tupleRaw, fieldIndex0) {
+  const parts = splitFieldsRobust(tupleRaw);
+  if (fieldIndex0 < 0 || fieldIndex0 >= parts.length) return tupleRaw;
+  parts.splice(fieldIndex0, 1);
+  return joinFields(parts);
+}
+function removeFieldFromAllTuplesInLine(line, fieldIndex0) {
+  const tuples = findAllTuplesInLineSmart(line);
+  if (!tuples.length) return line;
+  let out = line;
+  for (let i = tuples.length - 1; i >= 0; i--) {
+    const t = tuples[i];
+    const before = out.slice(0, t.open);
+    const after  = out.slice(t.close);
+    const replaced = removeFieldInTuple(t.raw, fieldIndex0);
+    out = before + replaced + after;
+  }
+  return out;
+}
+function removeFieldAcrossDocument(fieldIndex0) {
+  const lines = textArea.value.split(/\r?\n/);
+  for (let i = 0; i < lines.length; i++) {
+    lines[i] = removeFieldFromAllTuplesInLine(lines[i], fieldIndex0);
+  }
+  textArea.value = lines.join('\n');
+}
+nthApplyBtn.addEventListener('click', () => {
+  const idx1 = Number(nthInput.value);
+  if (!Number.isInteger(idx1) || idx1 < 1) { alert('Enter an integer ≥ 1.'); return; }
+  removeFieldAcrossDocument(idx1 - 1); // convert 1-based -> 0-based
+  nthModal.style.display = 'none';
+});
+nthInput.addEventListener('keydown', (e) => {
+  if (e.key === 'Enter') nthApplyBtn.click();
+  else if (e.key === 'Escape') nthCancelBtn.click();
+});
+
+/* ============================
+   Math Popup (Interfield + Field)
+============================ */
+const mathModal = document.getElementById('math-modal');
+const interfieldRow = document.getElementById('interfieldRow');
+const fieldRow = document.getElementById('fieldRow');
+const applyInterfieldBtn = document.getElementById('applyInterfieldBtn');
+const applyFieldBtn = document.getElementById('applyFieldBtn');
+const mathCloseBtn = document.getElementById('mathCloseBtn');
+
+function mk(labelText, el) {
+  const lab = document.createElement('label');
+  lab.textContent = labelText + ' ';
+  lab.appendChild(el);
+  return lab;
+}
+function makeNumberInput(val, min, width) {
+  const el = document.createElement('input');
+  el.type = 'number'; if (min != null) el.min = String(min);
+  if (val != null) el.value = String(val);
+  if (width) el.style.width = width;
+  return el;
+}
+function makeSelect(options) {
+  const el = document.createElement('select');
+  options.forEach(v => { const o = document.createElement('option'); o.value = v; o.textContent = v; el.appendChild(o); });
+  return el;
+}
+function makeRoundingSelect() { return makeSelect(['none','up','down']); }
+
+// Interfield controls
+const if_target = makeNumberInput(1, 1, '80px');
+const if_op     = makeSelect(['+','-','*','/']);
+const if_source = makeNumberInput(2, 1, '80px');
+const if_num    = (() => { const n = makeNumberInput(1, null, '120px'); n.step = 'any'; return n; })();
+const if_round  = makeRoundingSelect();
+const if_flip   = document.createElement('input'); if_flip.type='checkbox';
+
+interfieldRow.appendChild(mk('Target Field', if_target));
+interfieldRow.appendChild(mk('Operation', if_op));
+interfieldRow.appendChild(mk('Source Field', if_source));
+interfieldRow.appendChild(mk('Number', if_num));
+interfieldRow.appendChild(mk('Rounding', if_round));
+const if_flipWrap = document.createElement('label'); if_flipWrap.appendChild(if_flip); if_flipWrap.appendChild(document.createTextNode(' Flip Order'));
+interfieldRow.appendChild(if_flipWrap);
+
+// Field Math controls
+const fm_field = makeNumberInput(1, 1, '80px');
+const fm_op    = makeSelect(['+','-','*','/']);
+const fm_num   = (() => { const n = makeNumberInput(1, null, '120px'); n.step = 'any'; return n; })();
+const fm_round = makeRoundingSelect();
+const fm_flip  = document.createElement('input'); fm_flip.type='checkbox';
+
+fieldRow.appendChild(mk('Field', fm_field));
+fieldRow.appendChild(mk('Operation', fm_op));
+fieldRow.appendChild(mk('Number', fm_num));
+fieldRow.appendChild(mk('Rounding', fm_round));
+const fm_flipWrap = document.createElement('label'); fm_flipWrap.appendChild(fm_flip); fm_flipWrap.appendChild(document.createTextNode(' Flip Order'));
+fieldRow.appendChild(fm_flipWrap);
+
+// Open/close modal
+document.getElementById('mathButton').addEventListener('click', () => {
+  mathModal.style.display = 'flex';
+  setTimeout(() => if_target.focus(), 0);
+});
+mathCloseBtn.addEventListener('click', () => mathModal.style.display = 'none');
+mathModal.addEventListener('click', (e) => { if (e.target === mathModal) mathCloseBtn.click(); });
+
+// Apply logic
+function applyMathAcrossDocument(opts) {
+  const { targetIdx0, sourceIdx0, op, constant, rounding, flipOrder } = opts;
+  const lines = textArea.value.split(/\r?\n/);
+
+  for (let li = 0; li < lines.length; li++) {
+    let line = lines[li];
+    if (!line.trim()) continue;
+
+    const tuples = findAllTuplesInLineSmart(line);
+    if (!tuples.length) continue;
+
+    let newLine = line;
+    for (let k = tuples.length - 1; k >= 0; k--) {
+      const t = tuples[k];
+      const parts = splitFieldsRobust(t.raw);
+      if (targetIdx0 < 0 || targetIdx0 >= parts.length) continue;
+      if (sourceIdx0 < 0 || sourceIdx0 >= parts.length) continue;
+
+      const sourceRaw = parts[sourceIdx0].trim();
+      const targetRaw = parts[targetIdx0].trim();
+
+      if (isQuoted(sourceRaw)) continue;
+      const sourceNum = parseFloat(sourceRaw);
+      if (!isFinite(sourceNum)) continue;
+
+      let result;
+      if (!flipOrder) {
+        switch (op) {
+          case '+': result = constant + sourceNum; break;
+          case '-': result = constant - sourceNum; break;
+          case '*': result = constant * sourceNum; break;
+          case '/': if (sourceNum === 0) continue; result = constant / sourceNum; break;
+        }
+      } else {
+        switch (op) {
+          case '+': result = sourceNum + constant; break;
+          case '-': result = sourceNum - constant; break;
+          case '*': result = sourceNum * constant; break;
+          case '/': if (constant === 0) continue; result = sourceNum / constant; break;
+        }
+      }
+
+      if (rounding === 'up')   result = Math.ceil(result);
+      if (rounding === 'down') result = Math.floor(result);
+
+      parts[targetIdx0] = isQuoted(targetRaw) ? `'${result}'` : String(result);
+
+      const before = newLine.slice(0, t.open);
+      const after  = newLine.slice(t.close);
+      newLine = before + joinFields(parts) + after;
+    }
+    lines[li] = newLine;
+  }
+  textArea.value = lines.join('\n');
+}
+
+function applyFieldMathAcrossDocument(opts) {
+  const { fieldIdx0, op, constant, rounding, flipOrder } = opts;
+  const lines = textArea.value.split(/\r?\n/);
+
+  for (let li = 0; li < lines.length; li++) {
+    let line = lines[li];
+    if (!line.trim()) continue;
+
+    const tuples = findAllTuplesInLineSmart(line);
+    if (!tuples.length) continue;
+
+    let newLine = line;
+    for (let k = tuples.length - 1; k >= 0; k--) {
+      const t = tuples[k];
+      const parts = splitFieldsRobust(t.raw);
+      if (fieldIdx0 < 0 || fieldIdx0 >= parts.length) continue;
+
+      const raw = parts[fieldIdx0].trim();
+      if (isQuoted(raw)) continue;
+      const fieldNum = parseFloat(raw);
+      if (!isFinite(fieldNum)) continue;
+
+      let result;
+      if (!flipOrder) {
+        switch (op) {
+          case '+': result = fieldNum + constant; break;
+          case '-': result = fieldNum - constant; break;
+          case '*': result = fieldNum * constant; break;
+          case '/': if (constant === 0) continue; result = fieldNum / constant; break;
+        }
+      } else {
+        switch (op) {
+          case '+': result = constant + fieldNum; break;
+          case '-': result = constant - fieldNum; break;
+          case '*': result = constant * fieldNum; break;
+          case '/': if (fieldNum === 0) continue; result = constant / fieldNum; break;
+        }
+      }
+
+      if (rounding === 'up')   result = Math.ceil(result);
+      if (rounding === 'down') result = Math.floor(result);
+
+      parts[fieldIdx0] = isQuoted(raw) ? `'${result}'` : String(result);
+
+      const before = newLine.slice(0, t.open);
+      const after  = newLine.slice(t.close);
+      newLine = before + joinFields(parts) + after;
+    }
+    lines[li] = newLine;
+  }
+  textArea.value = lines.join('\n');
+}
+
+applyInterfieldBtn.addEventListener('click', () => {
+  const tgt1 = Number(if_target.value);
+  const src1 = Number(if_source.value);
+  const op   = String(if_op.value);
+  const val  = Number(if_num.value);
+  const rnd  = String(if_round.value);
+  const flip = !!if_flip.checked;
+
+  if (!Number.isInteger(tgt1) || tgt1 < 1) { alert('Target field must be an integer ≥ 1.'); return; }
+  if (!Number.isInteger(src1) || src1 < 1) { alert('Source field must be an integer ≥ 1.'); return; }
+  if (!isFinite(val)) { alert('Please enter a valid Number.'); return; }
+  if (!['+','-','*','/'].includes(op)) { alert('Choose a valid operation.'); return; }
+  if (!['none','up','down'].includes(rnd)) { alert('Choose a valid rounding mode.'); return; }
+
+  applyMathAcrossDocument({
+    targetIdx0: tgt1 - 1,
+    sourceIdx0: src1 - 1,
+    op, constant: val,
+    rounding: rnd,
+    flipOrder: flip
+  });
+});
+
+applyFieldBtn.addEventListener('click', () => {
+  const fld1 = Number(fm_field.value);
+  const op   = String(fm_op.value);
+  const val  = Number(fm_num.value);
+  const rnd  = String(fm_round.value);
+  const flip = !!fm_flip.checked;
+
+  if (!Number.isInteger(fld1) || fld1 < 1) { alert('Field must be an integer ≥ 1.'); return; }
+  if (!isFinite(val)) { alert('Please enter a valid Number.'); return; }
+  if (!['+','-','*','/'].includes(op)) { alert('Choose a valid operation.'); return; }
+  if (!['none','up','down'].includes(rnd)) { alert('Choose a valid rounding mode.'); return; }
+
+  applyFieldMathAcrossDocument({
+    fieldIdx0: fld1 - 1,
+    op, constant: val,
+    rounding: rnd,
+    flipOrder: flip
+  });
+});
+
+/* ============================
+   Init
+============================ */
+updateBoardView();
+setParseModeLabel('Auto');
+</script>
+</body>
+</html>
