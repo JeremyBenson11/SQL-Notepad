@@ -409,7 +409,7 @@ dedupeBtn.addEventListener('click', () => {
   collectedItems.length = 0; collectedItems.push(...next); updateBoardView();
 });
 shuffleBtn.addEventListener('click', () => {
-  for (let i = collectedItems.length - 1; i > 0; i++) {
+  for (let i = collectedItems.length - 1; i > 0; i--) {
     const j = Math.floor(Math.random() * (i + 1));
     [collectedItems[i], collectedItems[j]] = [collectedItems[j]], [collectedItems[i]];
   }
@@ -663,11 +663,12 @@ document.addEventListener('keydown', function (event) {
 
 /* ============================
    Tokenizer – last field -> unique 'Token'
+   (Only if last field is an empty quoted value: '' or '   ')
 ============================ */
 function generateToken(length) {
   const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz';
   let token = '';
-  for (let i = 0; i < length; i++) token += chars.charAt(Math.floor(Math.random() * chars.length));
+  for (let i = 0; i < length; i++) token += chars.charAt(Math.floor(Math.random() * (i + 1 === 0 ? 0 : chars.length)));
   return token;
 }
 function getUniqueToken(existingContent, length) {
@@ -675,12 +676,26 @@ function getUniqueToken(existingContent, length) {
   do { token = generateToken(length); } while (existingContent.includes(token));
   return token;
 }
-function replaceLastFieldWithQuotedToken(tupleRaw, token) {
+
+// NEW: detect empty quoted field ('' or quotes with only whitespace)
+function isEmptyQuotedField(str) {
+  const t = String(str).trim();
+  if (!(t.startsWith("'") && t.endsWith("'"))) return false;
+  // normalize doubled single quotes -> single quotes, then trim spaces
+  const inner = t.slice(1, -1).replace(/''/g, "'");
+  return inner.trim().length === 0;
+}
+
+// NEW: only replace if last field is an empty quoted value
+function replaceLastFieldWithQuotedTokenIfEmpty(tupleRaw, token) {
   const parts = splitFieldsRobust(tupleRaw);
   if (parts.length === 0) return tupleRaw;
+  const last = parts[parts.length - 1];
+  if (!isEmptyQuotedField(last)) return tupleRaw;
   parts[parts.length - 1] = `'${String(token).replace(/'/g, "''")}'`;
   return joinFields(parts);
 }
+
 tokenizeBtn.addEventListener('click', () => {
   if (!textArea) return;
   let content = textArea.value;
@@ -696,18 +711,23 @@ tokenizeBtn.addEventListener('click', () => {
     let newLine = line;
     for (let k = tuples.length - 1; k >= 0; k--) {
       const t = tuples[k];
-      const token = getUniqueToken(content, 12);
+      // Only generate a token if we actually need to replace
+      const candidateToken = getUniqueToken(content, 12);
 
       const before = newLine.slice(0, t.open);
       const after  = newLine.slice(t.close);
-      const replacedTuple = replaceLastFieldWithQuotedToken(t.raw, token);
-      newLine = before + replacedTuple + after;
+      const replacedTuple = replaceLastFieldWithQuotedTokenIfEmpty(t.raw, candidateToken);
 
-      // update whole doc snapshot to keep tokens unique
-      const docPrefixLen = lines.slice(0, li).join('\\n').length + (li > 0 ? 1 : 0);
-      const beforeDoc = content.slice(0, docPrefixLen);
-      const afterDoc  = content.slice(docPrefixLen + line.length);
-      content = beforeDoc + newLine + afterDoc;
+      if (replacedTuple !== t.raw) {
+        newLine = before + replacedTuple + after;
+
+        // update whole doc snapshot to keep tokens unique
+        const docPrefixLen = lines.slice(0, li).join('\n').length + (li > 0 ? 1 : 0);
+        const beforeDoc = content.slice(0, docPrefixLen);
+        const afterDoc  = content.slice(docPrefixLen + line.length);
+        content = beforeDoc + newLine + afterDoc;
+      }
+      // if no replacement, leave line as-is and do not consume a token
     }
     lines[li] = newLine;
   }
