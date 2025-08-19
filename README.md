@@ -15,12 +15,12 @@ weapons, smithing, spellcraft can be dumped into that second field set. Simple h
 Interfield Math and Field Math can easily be accomplished.
 
 *Interfield*<br>
-field 1 * 2000 / field 2.
+field 1 = 1000 / field 2
 
 (1, 2000),
 (1, 2000),
 
-The field 1 becomes 1000.
+The field 1 becomes 500.
 
 *field math*<br>
 
