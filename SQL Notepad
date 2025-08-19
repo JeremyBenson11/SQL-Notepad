@@ -46,7 +46,8 @@
     border-bottom: 1px solid var(--border);
   }
   header h1 { margin: 0 0 6px; font-size: 20px; }
-  header p { margin: 0; font-size: 14px; color: var(--muted); }
+  /* Keep vertical space where the paragraph used to be */
+  header p { margin: 0; font-size: 14px; color: var(--muted); min-height: 1.4em; }
   kbd {
     background: var(--pill);
     border: 1px solid var(--border);
@@ -63,6 +64,10 @@
     background: var(--bg2); color: var(--fg);
     border-bottom:1px solid var(--border);
     flex-wrap: wrap;
+  }
+  .bar .right {
+    margin-left:auto; display:flex; gap:8px; align-items:center; flex-wrap:nowrap;
+    white-space:nowrap;
   }
   .pill {
     background: var(--pill);
@@ -115,7 +120,7 @@
     display: none; align-items: center; justify-content: center; z-index: 9999;
   }
   .dialog {
-    width: 640px; max-width: 95%; padding: 16px;
+    width: 720px; max-width: 95%; padding: 16px;
     border-radius: 12px; background: var(--panel); color: var(--fg);
     border: 1px solid var(--border); font-family: Arial, sans-serif;
     box-shadow: 0 10px 30px rgba(0,0,0,0.35);
@@ -137,36 +142,59 @@
   .dialog button.primary:hover { background: var(--accent-hover); }
 
   .divider { height:1px; background: var(--border); margin: 12px 0; }
+
+  .icon { display:inline-flex; align-items:center; gap:6px; }
+  .icon svg { width:16px; height:16px; vertical-align:middle; }
+
+  .about-list { line-height: 1.6; font-size: 14px; color: var(--fg); }
+  .about-list kbd { font-size: 12px; }
 </style>
 </head>
 <body data-theme="dark">
   <header>
     <h1>SQL Notepad</h1>
-    <p>
-      <kbd>Ctrl</kbd>+<kbd>A</kbd> collect selection •
-      <kbd>Ctrl</kbd>+<kbd>I</kbd> dump into n’th field •
-      <kbd>Ctrl</kbd>+<kbd>D</kbd> duplicate line •
-      <kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>V</kbd> import clipboard
-    </p>
+    <!-- keep the vertical space, but no inline help text -->
+    <p>&nbsp;</p>
   </header>
 
   <div class="bar">
     <span class="pill" id="countPill">Copy Board: 0 items</span>
-    <span class="pill" id="parsePill" title="How text was tokenized">Parsing: Auto</span>
-
+    <span class="pill" id="setCountPill">Set: 0 items</span>
     <button id="clearBtn"      class="secondary" title="Clear the Copy Board">Clear Copy Board</button>
     <button id="importBtn"     class="secondary" title="Import text from system clipboard">Import Clipboard</button>
-    <button id="saveBtn"       class="secondary" title="Save Copy Board to localStorage">Save</button>
-    <button id="loadBtn"       class="secondary" title="Load Copy Board from localStorage">Load</button>
 
     <button id="tokenizeBtn"   title="Replace last field in every tuple with a unique token">Tokenizer</button>
     <button id="nthFieldRemover" title="Remove the n’th field (1-based) from every tuple">Remove n’th Field</button>
     <button id="mathButton"    title="Open math tools for field operations">Math</button>
 
-    <span style="flex:1"></span>
+    <div class="right">
+      <button id="toggleBoardBtn" class="secondary" title="Hide/Show Copy Board">Hide Copy Board</button>
+      <button id="themeToggleBtn" class="secondary" title="Toggle theme">Light Theme</button>
 
-    <button id="toggleBoardBtn" class="secondary" title="Hide/Show Copy Board">Hide Copy Board</button>
-    <button id="themeToggleBtn" class="secondary" title="Toggle theme">Light Theme</button>
+      <!-- Help button (book icon) -->
+      <button id="helpBtn" class="secondary" title="About / Help">
+        <span class="icon">
+          <!-- book icon -->
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+               stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"></path>
+            <path d="M4 4h16v15H6.5A2.5 2.5 0 0 0 4 21.5z"></path>
+          </svg>
+          Help
+        </span>
+      </button>
+
+      <button id="settingsBtn" class="secondary" title="Settings">
+        <span class="icon">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+               stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <circle cx="12" cy="12" r="3"></circle>
+            <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09a1.65 1.65 0 0 0-1-1.51 1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a2 2 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09c.17 0 .35-.03.51-.1.61-.25 1-.85 1-1.51V9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06c.51.51 1.23.66 1.82.33H9c.66 0 1.26-.39 1.51-1V3a2 2 0 0 1 4 0v.09c.25.61.85 1 1.51 1h.09c.59.33 1.31.18 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06c-.51.51-.66 1.23-.33 1.82V9c0 .66.39 1.26 1 1.51.16.07.34.1.51.1H21a2 2 0 0 1 0 4h-.09c-.17 0-.35.03-.51.1-.61.25-1 .85-1 1.51z"></path>
+          </svg>
+          Settings
+        </span>
+      </button>
+    </div>
   </div>
 
   <div class="wrap" id="mainWrap">
@@ -221,17 +249,78 @@ line'></textarea>
       <div class="row" id="fieldRow"></div>
       <div class="btns">
         <button id="applyFieldBtn" class="primary">Apply Field</button>
+      </div>
+
+      <div class="divider"></div>
+
+      <div class="hint">Result: <b>Target = Field Ⓐ (op) Field Ⓑ</b> · Fields are <b>1-based</b></div>
+      <div class="row" id="fieldFieldRow"></div>
+      <div class="btns">
+        <button id="applyFieldFieldBtn" class="primary">Apply Field Ⓐ (op) Field Ⓑ → Target</button>
         <button id="mathCloseBtn">Close</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Settings Modal -->
+  <div class="overlay" id="settings-modal">
+    <div class="dialog">
+      <div class="title">Settings</div>
+      <div class="hint">Personalize editor behaviors.</div>
+      <div class="row">
+        <label>
+          <input type="checkbox" id="clearTokenOnDup">
+          Clear last field on duplicate (<kbd>Ctrl</kbd>+<kbd>D</kbd>)
+        </label>
+      </div>
+      <div class="btns">
+        <button id="settingsCloseBtn" class="primary">Done</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- About / Help Modal -->
+  <div class="overlay" id="about-modal">
+    <div class="dialog">
+      <div class="title">About SQL Notepad</div>
+      <div class="hint">Keyboard shortcuts & features</div>
+      <div class="about-list">
+        <ul>
+          <li><kbd>Ctrl</kbd>+<kbd>B</kbd> – collect selection to Copy Board (removes it from editor)</li>
+          <li><kbd>Ctrl</kbd>+<kbd>I</kbd> – dump Copy Board items into the n’th field across tuples</li>
+          <li><kbd>Ctrl</kbd>+<kbd>D</kbd> – duplicate current line (down). If enabled in <em>Settings</em>, clears the <em>last field</em> on the duplicate</li>
+          <li><kbd>Ctrl</kbd>+<kbd>R</kbd> – remove current line, crimping content upward</li>
+          <li><kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>V</kbd> – import clipboard into Copy Board</li>
+          <li><b>Tokenizer</b> – fills only empty last fields (<code>''</code> or <code>' '</code>) with unique tokens</li>
+          <li><b>Remove n’th Field</b> – removes a 1-based field index from every tuple</li>
+          <li><b>Math</b> – Interfield (Number & Field), Field Math (Field & Number), and Field vs Field → Target</li>
+          <li><b>Copy Board</b> – accepts CSV, lines, or whitespace; includes Dedupe and Shuffle utilities</li>
+        </ul>
+      </div>
+      <div class="btns">
+        <button id="aboutCloseBtn" class="primary">Close</button>
       </div>
     </div>
   </div>
 
 <script>
 /* ============================
-   Persistent UI state (theme & panel)
+   Persistent UI state (theme, panel, settings)
 ============================ */
 const THEME_KEY = 'sqlFieldDump.theme';
 const BOARD_VIS_KEY = 'sqlFieldDump.boardCollapsed';
+const SETTINGS_KEY = 'sqlFieldDump.settings';
+
+function loadSettings() {
+  try {
+    const raw = localStorage.getItem(SETTINGS_KEY);
+    return raw ? JSON.parse(raw) : { clearTokenOnDuplicate: false }; // OFF by default ✅
+  } catch { return { clearTokenOnDuplicate: false }; }              // OFF by default ✅
+}
+function saveSettings(s) {
+  try { localStorage.setItem(SETTINGS_KEY, JSON.stringify(s)); } catch {}
+}
+let SETTINGS = loadSettings();
 
 function applyTheme(theme) {
   document.body.setAttribute('data-theme', theme);
@@ -370,8 +459,6 @@ boardArea.addEventListener('input', syncFromBoard);
 ============================ */
 const clearBtn     = document.getElementById('clearBtn');
 const importBtn    = document.getElementById('importBtn');
-const saveBtn      = document.getElementById('saveBtn');
-const loadBtn      = document.getElementById('loadBtn');
 const dedupeBtn    = document.getElementById('dedupeBtn');
 const shuffleBtn   = document.getElementById('shuffleBtn');
 const tokenizeBtn  = document.getElementById('tokenizeBtn');
@@ -388,21 +475,6 @@ importBtn.addEventListener('click', async () => {
     alert('Clipboard read failed. Your browser may not allow it on this page.');
   }
 });
-saveBtn.addEventListener('click', () => {
-  localStorage.setItem('sqlFieldDump.copyBoard', JSON.stringify(collectedItems));
-});
-loadBtn.addEventListener('click', () => {
-  const raw = localStorage.getItem('sqlFieldDump.copyBoard');
-  if (!raw) return;
-  try {
-    const arr = JSON.parse(raw);
-    if (Array.isArray(arr)) {
-      collectedItems.length = 0;
-      collectedItems.push(...arr.map(String));
-      updateBoardView();
-    }
-  } catch {}
-});
 dedupeBtn.addEventListener('click', () => {
   const seen = new Set(), next = [];
   for (const it of collectedItems) if (!seen.has(it)) { seen.add(it); next.push(it); }
@@ -411,7 +483,7 @@ dedupeBtn.addEventListener('click', () => {
 shuffleBtn.addEventListener('click', () => {
   for (let i = collectedItems.length - 1; i > 0; i--) {
     const j = Math.floor(Math.random() * (i + 1));
-    [collectedItems[i], collectedItems[j]] = [collectedItems[j]], [collectedItems[i]];
+    [collectedItems[i], collectedItems[j]] = [collectedItems[j], collectedItems[i]];
   }
   updateBoardView();
 });
@@ -434,7 +506,6 @@ function getLineIndexAndColumn(text, caretPos) {
 
 /* ============================
    Robust tuple parsing
-   - Handles quotes, '' and backslash-escaped \'
 ============================ */
 function findAllTuplesInLineSmart(line) {
   const tuples = [];
@@ -532,7 +603,7 @@ function joinFields(parts) { return '(' + parts.join(', ') + ')'; }
 function isQuoted(str) { const t = str.trim(); return t.startsWith("'") && t.endsWith("'"); }
 
 /* ============================
-   Insert collected items (Ctrl+I) – does NOT consume board
+   Insert collected items (Ctrl+I)
 ============================ */
 function countCommasBeforeIndexRobust(line, tupleOpen, indexInLine) {
   const start = tupleOpen + 1;
@@ -563,8 +634,8 @@ function countCommasBeforeIndexRobust(line, tupleOpen, indexInLine) {
 }
 
 document.addEventListener('keydown', function (event) {
-  // Collect: Ctrl+A (only when focused in main editor)
-  if (event.ctrlKey && event.key.toLowerCase() === 'a' && document.activeElement === textArea) {
+  // Collect: Ctrl+B  (free up Ctrl+A for Select All)
+  if (event.ctrlKey && event.key.toLowerCase() === 'b' && document.activeElement === textArea) {
     event.preventDefault();
 
     const start = textArea.selectionStart;
@@ -600,7 +671,6 @@ document.addEventListener('keydown', function (event) {
     const startLine= info.lineIndex;
     const column   = info.column;
 
-    // Determine field index from caret position on startLine
     const tupOnCaret = findAllTuplesInLineSmart(lines[startLine])[0] || null;
     if (!tupOnCaret) return;
 
@@ -621,7 +691,6 @@ document.addEventListener('keydown', function (event) {
       const tuples = findAllTuplesInLineSmart(line);
       if (!tuples.length) continue;
 
-      // Replace first tuple on the line at that field
       const t = tuples[0];
       const before = line.slice(0, t.open);
       const after  = line.slice(t.close);
@@ -644,31 +713,59 @@ document.addEventListener('keydown', function (event) {
     return;
   }
 
-  // Duplicate line: Ctrl+D
+  // Duplicate line down: Ctrl+D  (insert AFTER the current line)
   if (event.ctrlKey && event.key.toLowerCase() === 'd' && document.activeElement === textArea) {
     event.preventDefault();
     const pos = textArea.selectionStart;
     const { lines, lineIndex, column } = getLineIndexAndColumn(textArea.value, pos);
-    const line = lines[lineIndex];
-    lines.splice(lineIndex, 0, line);
+    const srcLine = lines[lineIndex];
+
+    // Prepare the duplicate (optionally clear LAST FIELD in every tuple on the NEW duplicate)
+    let dup = srcLine;
+    if (SETTINGS.clearTokenOnDuplicate) {
+      dup = clearLastFieldInAllTuples(dup);
+    }
+
+    // Insert the new duplicate AFTER the original line
+    lines.splice(lineIndex + 1, 0, dup);
     textArea.value = lines.join('\n');
 
-    let acc = 0;
-    for (let i = 0; i < lineIndex; i++) acc += lines[i].length + 1;
-    const newCaret = acc + Math.min(column, line.length);
+    // Move caret to the duplicate at the same column
+    let startOfNew = 0;
+    for (let i = 0; i <= lineIndex; i++) startOfNew += lines[i].length + 1; // after original\n
+    const newCaret = startOfNew + Math.min(column, lines[lineIndex + 1].length);
     textArea.setSelectionRange(newCaret, newCaret);
+    return;
+  }
+
+  // Remove current line: Ctrl+R (crimp upward)
+  if (event.ctrlKey && event.key.toLowerCase() === 'r' && document.activeElement === textArea) {
+    event.preventDefault();
+    const pos = textArea.selectionStart;
+    const { lines, lineIndex } = getLineIndexAndColumn(textArea.value, pos);
+    if (!lines.length) return;
+
+    // Remove the current line and crimp content upward
+    lines.splice(lineIndex, 1);
+
+    // Caret at start of the line now occupying this index
+    const newIndex = Math.min(lineIndex, Math.max(0, lines.length - 1));
+    let acc = 0;
+    for (let i = 0; i < newIndex; i++) acc += lines[i].length + 1;
+
+    textArea.value = lines.join('\n');
+    textArea.setSelectionRange(acc, acc);
     return;
   }
 });
 
 /* ============================
-   Tokenizer – last field -> unique 'Token'
-   (Only if last field is an empty quoted value: '' or '   ')
+   Tokenizer (only fill empty last field)
 ============================ */
 function generateToken(length) {
   const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz';
   let token = '';
-  for (let i = 0; i < length; i++) token += chars.charAt(Math.floor(Math.random() * (i + 1 === 0 ? 0 : chars.length)));
+  for (let i = 0; i < length; i++) token += chars.charAt(Math.floor(Math.random() * chars.length));
   return token;
 }
 function getUniqueToken(existingContent, length) {
@@ -676,27 +773,21 @@ function getUniqueToken(existingContent, length) {
   do { token = generateToken(length); } while (existingContent.includes(token));
   return token;
 }
-
-// NEW: detect empty quoted field ('' or quotes with only whitespace)
 function isEmptyQuotedField(str) {
   const t = String(str).trim();
   if (!(t.startsWith("'") && t.endsWith("'"))) return false;
-  // normalize doubled single quotes -> single quotes, then trim spaces
   const inner = t.slice(1, -1).replace(/''/g, "'");
   return inner.trim().length === 0;
 }
-
-// NEW: only replace if last field is an empty quoted value
 function replaceLastFieldWithQuotedTokenIfEmpty(tupleRaw, token) {
   const parts = splitFieldsRobust(tupleRaw);
-  if (parts.length === 0) return tupleRaw;
+  if (!parts.length) return tupleRaw;
   const last = parts[parts.length - 1];
   if (!isEmptyQuotedField(last)) return tupleRaw;
   parts[parts.length - 1] = `'${String(token).replace(/'/g, "''")}'`;
   return joinFields(parts);
 }
-
-tokenizeBtn.addEventListener('click', () => {
+document.getElementById('tokenizeBtn').addEventListener('click', () => {
   if (!textArea) return;
   let content = textArea.value;
   const lines = content.split(/\r?\n/);
@@ -711,7 +802,6 @@ tokenizeBtn.addEventListener('click', () => {
     let newLine = line;
     for (let k = tuples.length - 1; k >= 0; k--) {
       const t = tuples[k];
-      // Only generate a token if we actually need to replace
       const candidateToken = getUniqueToken(content, 12);
 
       const before = newLine.slice(0, t.open);
@@ -721,13 +811,11 @@ tokenizeBtn.addEventListener('click', () => {
       if (replacedTuple !== t.raw) {
         newLine = before + replacedTuple + after;
 
-        // update whole doc snapshot to keep tokens unique
         const docPrefixLen = lines.slice(0, li).join('\n').length + (li > 0 ? 1 : 0);
         const beforeDoc = content.slice(0, docPrefixLen);
         const afterDoc  = content.slice(docPrefixLen + line.length);
         content = beforeDoc + newLine + afterDoc;
       }
-      // if no replacement, leave line as-is and do not consume a token
     }
     lines[li] = newLine;
   }
@@ -777,7 +865,7 @@ function removeFieldAcrossDocument(fieldIndex0) {
 nthApplyBtn.addEventListener('click', () => {
   const idx1 = Number(nthInput.value);
   if (!Number.isInteger(idx1) || idx1 < 1) { alert('Enter an integer ≥ 1.'); return; }
-  removeFieldAcrossDocument(idx1 - 1); // convert 1-based -> 0-based
+  removeFieldAcrossDocument(idx1 - 1);
   nthModal.style.display = 'none';
 });
 nthInput.addEventListener('keydown', (e) => {
@@ -786,13 +874,15 @@ nthInput.addEventListener('keydown', (e) => {
 });
 
 /* ============================
-   Math Popup (Interfield + Field)
+   Math Popup (Interfield + Field + Field-vs-Field)
 ============================ */
 const mathModal = document.getElementById('math-modal');
 const interfieldRow = document.getElementById('interfieldRow');
 const fieldRow = document.getElementById('fieldRow');
+const fieldFieldRow = document.getElementById('fieldFieldRow');
 const applyInterfieldBtn = document.getElementById('applyInterfieldBtn');
 const applyFieldBtn = document.getElementById('applyFieldBtn');
+const applyFieldFieldBtn = document.getElementById('applyFieldFieldBtn');
 const mathCloseBtn = document.getElementById('mathCloseBtn');
 
 function mk(labelText, el) {
@@ -815,7 +905,7 @@ function makeSelect(options) {
 }
 function makeRoundingSelect() { return makeSelect(['none','up','down']); }
 
-// Interfield controls
+// Interfield controls (Target = Number (op) Source [or flipped])
 const if_target = makeNumberInput(1, 1, '80px');
 const if_op     = makeSelect(['+','-','*','/']);
 const if_source = makeNumberInput(2, 1, '80px');
@@ -831,7 +921,7 @@ interfieldRow.appendChild(mk('Rounding', if_round));
 const if_flipWrap = document.createElement('label'); if_flipWrap.appendChild(if_flip); if_flipWrap.appendChild(document.createTextNode(' Flip Order'));
 interfieldRow.appendChild(if_flipWrap);
 
-// Field Math controls
+// Field Math controls (Field = Field (op) Number [or flipped])
 const fm_field = makeNumberInput(1, 1, '80px');
 const fm_op    = makeSelect(['+','-','*','/']);
 const fm_num   = (() => { const n = makeNumberInput(1, null, '120px'); n.step = 'any'; return n; })();
@@ -844,6 +934,19 @@ fieldRow.appendChild(mk('Number', fm_num));
 fieldRow.appendChild(mk('Rounding', fm_round));
 const fm_flipWrap = document.createElement('label'); fm_flipWrap.appendChild(fm_flip); fm_flipWrap.appendChild(document.createTextNode(' Flip Order'));
 fieldRow.appendChild(fm_flipWrap);
+
+// Field Ⓐ (op) Field Ⓑ into Target controls
+const ff_target = makeNumberInput(1, 1, '80px');
+const ff_op     = makeSelect(['+','-','*','/']);
+const ff_a      = makeNumberInput(1, 1, '80px');
+const ff_b      = makeNumberInput(2, 1, '80px');
+const ff_round  = makeRoundingSelect();
+
+fieldFieldRow.appendChild(mk('Target Field', ff_target));
+fieldFieldRow.appendChild(mk('Operation', ff_op));
+fieldFieldRow.appendChild(mk('Field Ⓐ', ff_a));
+fieldFieldRow.appendChild(mk('Field Ⓑ', ff_b));
+fieldFieldRow.appendChild(mk('Rounding', ff_round));
 
 // Open/close modal
 document.getElementById('mathButton').addEventListener('click', () => {
@@ -963,6 +1066,57 @@ function applyFieldMathAcrossDocument(opts) {
   textArea.value = lines.join('\n');
 }
 
+function applyFieldOpFieldToTargetAcrossDocument(opts) {
+  const { targetIdx0, aIdx0, bIdx0, op, rounding } = opts;
+  const lines = textArea.value.split(/\r?\n/);
+
+  for (let li = 0; li < lines.length; li++) {
+    let line = lines[li];
+    if (!line.trim()) continue;
+
+    const tuples = findAllTuplesInLineSmart(line);
+    if (!tuples.length) continue;
+
+    let newLine = line;
+    for (let k = tuples.length - 1; k >= 0; k--) {
+      const t = tuples[k];
+      const parts = splitFieldsRobust(t.raw);
+      if (targetIdx0 < 0 || targetIdx0 >= parts.length) continue;
+      if (aIdx0 < 0 || aIdx0 >= parts.length) continue;
+      if (bIdx0 < 0 || bIdx0 >= parts.length) continue;
+
+      const aRaw = parts[aIdx0].trim();
+      const bRaw = parts[bIdx0].trim();
+      const targetRaw = parts[targetIdx0].trim();
+
+      if (isQuoted(aRaw) || isQuoted(bRaw)) continue;
+      const aNum = parseFloat(aRaw);
+      const bNum = parseFloat(bRaw);
+      if (!isFinite(aNum) || !isFinite(bNum)) continue;
+
+      let result;
+      switch (op) {
+        case '+': result = aNum + bNum; break;
+        case '-': result = aNum - bNum; break;
+        case '*': result = aNum * bNum; break;
+        case '/': if (bNum === 0) continue; result = aNum / bNum; break;
+        default: continue;
+      }
+
+      if (rounding === 'up')   result = Math.ceil(result);
+      if (rounding === 'down') result = Math.floor(result);
+
+      parts[targetIdx0] = isQuoted(targetRaw) ? `'${result}'` : String(result);
+
+      const before = newLine.slice(0, t.open);
+      const after  = newLine.slice(t.close);
+      newLine = before + joinFields(parts) + after;
+    }
+    lines[li] = newLine;
+  }
+  textArea.value = lines.join('\n');
+}
+
 applyInterfieldBtn.addEventListener('click', () => {
   const tgt1 = Number(if_target.value);
   const src1 = Number(if_source.value);
@@ -1005,6 +1159,88 @@ applyFieldBtn.addEventListener('click', () => {
     flipOrder: flip
   });
 });
+
+applyFieldFieldBtn.addEventListener('click', () => {
+  const tgt1 = Number(ff_target.value);
+  const a1   = Number(ff_a.value);
+  const b1   = Number(ff_b.value);
+  const op   = String(ff_op.value);
+  const rnd  = String(ff_round.value);
+
+  if (!Number.isInteger(tgt1) || tgt1 < 1) { alert('Target field must be an integer ≥ 1.'); return; }
+  if (!Number.isInteger(a1) || a1 < 1) { alert('Field Ⓐ must be an integer ≥ 1.'); return; }
+  if (!Number.isInteger(b1) || b1 < 1) { alert('Field Ⓑ must be an integer ≥ 1.'); return; }
+  if (!['+','-','*','/'].includes(op)) { alert('Choose a valid operation.'); return; }
+  if (!['none','up','down'].includes(rnd)) { alert('Choose a valid rounding mode.'); return; }
+
+  applyFieldOpFieldToTargetAcrossDocument({
+    targetIdx0: tgt1 - 1,
+    aIdx0: a1 - 1,
+    bIdx0: b1 - 1,
+    op,
+    rounding: rnd
+  });
+});
+
+/* ============================
+   Settings modal wiring
+============================ */
+const settingsModal = document.getElementById('settings-modal');
+const settingsBtn   = document.getElementById('settingsBtn');
+const settingsClose = document.getElementById('settingsCloseBtn');
+const clearOnDupChk = document.getElementById('clearTokenOnDup');
+
+function openSettings() {
+  clearOnDupChk.checked = !!SETTINGS.clearTokenOnDuplicate;
+  settingsModal.style.display = 'flex';
+}
+function closeSettings() {
+  SETTINGS.clearTokenOnDuplicate = !!clearOnDupChk.checked;
+  saveSettings(SETTINGS);
+  settingsModal.style.display = 'none';
+}
+settingsBtn.addEventListener('click', openSettings);
+settingsClose.addEventListener('click', closeSettings);
+settingsModal.addEventListener('click', (e) => { if (e.target === settingsModal) closeSettings(); });
+// Save immediately on change
+clearOnDupChk.addEventListener('change', () => {
+  SETTINGS.clearTokenOnDuplicate = !!clearOnDupChk.checked;
+  saveSettings(SETTINGS);
+});
+
+/* ============================
+   Helpers to clear LAST field in tuples (used by Ctrl+D)
+============================ */
+function clearLastFieldInTuple(tupleRaw) {
+  const parts = splitFieldsRobust(tupleRaw);
+  if (!parts.length) return tupleRaw;
+  parts[parts.length - 1] = "''"; // always set to empty string
+  return joinFields(parts);
+}
+function clearLastFieldInAllTuples(line) {
+  const tuples = findAllTuplesInLineSmart(line);
+  if (!tuples.length) return line;
+  let out = line;
+  for (let i = tuples.length - 1; i >= 0; i--) {
+    const t = tuples[i];
+    const before = out.slice(0, t.open);
+    const after  = out.slice(t.close);
+    const replaced = clearLastFieldInTuple(t.raw);
+    out = before + replaced + after;
+  }
+  return out;
+}
+
+/* ============================
+   About / Help modal
+============================ */
+const aboutModal = document.getElementById('about-modal');
+const helpBtn    = document.getElementById('helpBtn');
+const aboutClose = document.getElementById('aboutCloseBtn');
+
+helpBtn.addEventListener('click', () => { aboutModal.style.display = 'flex'; });
+aboutClose.addEventListener('click', () => { aboutModal.style.display = 'none'; });
+aboutModal.addEventListener('click', (e) => { if (e.target === aboutModal) aboutClose.click(); });
 
 /* ============================
    Init
