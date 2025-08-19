@@ -3,7 +3,7 @@ SQL Notepad is written in HTML5 and JS. Simply save the code in an HTML document
 
 
 **SQL Notepad**<br>
-SQL Notepad came from text game development and working with SQL files over a long period of time. Some of these operations that once took hours can now be minutes.
+SQL Notepad came from text game development and working with SQL files over a long period of time. Some of these operations that once took hours will now take minutes.
 
 **Field Dump**<br>
 
