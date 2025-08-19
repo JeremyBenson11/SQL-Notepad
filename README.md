@@ -8,7 +8,7 @@ SQL Notepad came from text game development and working with SQL files over a lo
 **Field Dump**<br>
 
 Field dump will take a comma seperated list and dump it vertically into the field located at the caret position.
-*'weapons, smithing, spellcraft'* can be dumped into that second field. Simply highlight a list and press ctlr+a to add it to the Copy Board. Ctrl+I to insert it from start field.
+*'weapons, smithing, spellcraft'* can be dumped into that second field. Highlight the list and add it to the Copy Board with ctrl+b. Put the caret in the second field of the first tuple and press Ctrl+I to insert it from start field.
 
 (1, ''),<br>
 (2, ''),<br>
