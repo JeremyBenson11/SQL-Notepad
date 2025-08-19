@@ -40,7 +40,7 @@ End fields gain a unique token not used within the document.
 
 **Themes** <br>
 
-Switch between light and dark theme.
+Switch between light or dark theme.
 
 **Disclaimer** <br>
 
