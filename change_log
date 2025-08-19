@@ -4,5 +4,6 @@ Aug 19th, 2025
 2. ctrl+r has been added to remove line.
 3. ctrl+d duplicates line. There is a setting in the settings panel that will remove end tokens from the duplicate.
 4. A help button has been added to show controls in a popup, to clean up UI.
-5. A new math has been added: targe field = field (op) field.
+5. A new math has been added: target field = field (op) field.
 6. save and load buttons have been removed and supporting code.
+7. settings are stored in local storage.
