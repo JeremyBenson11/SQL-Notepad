@@ -1,3 +1,7 @@
+**How To Run SQL Notepad**<br>
+SQL Notepad is written in HTML5 and JS. Simply save the code in an HTML document and launch it in your preferred browser.
+
+
 **SQL Notepad**<br>
 SQL Notepad came from text game development and working with SQL files over a long period of time. Some of these operations that once took hours can now be minutes.
 
