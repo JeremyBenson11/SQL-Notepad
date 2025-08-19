@@ -10,9 +10,13 @@ SQL Notepad came from text game development and working with SQL files over a lo
 Field dump will take a comma seperated list and dump it vertically into the field located at the caret position.
 weapons, smithing, spellcraft can be dumped into that second field set. Simple highlight a list and press ctlr+a to add it to the Copy Board. Ctrl+I to insert it from start field.
 
-(1, ''),
-(2, ''),
-(3, ''),
+(1, ''),<br>
+(2, ''),<br>
+(3, ''),<br>
+
+(1, 'weapons'),<br>
+(2, 'smithing'),<br>
+(3, 'spellcraft'),<br>
 
 **Math**<br>
 
