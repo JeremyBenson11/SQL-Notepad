@@ -23,12 +23,12 @@ Field dump will take a comma seperated list and dump it vertically into the fiel
 Interfield Math and Field Math can easily be accomplished.
 
 *Interfield*<br>
-field 1 = 1000 / field 2
+field 1 = 4000 / field 2
 
 (1, 2000),
 (1, 2000),
 
-The field 1 becomes 500.
+The field 1 becomes 2.
 
 *field math*<br>
 
