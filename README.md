@@ -20,9 +20,10 @@ Field dump will take a comma seperated list and dump it vertically into the fiel
 
 **Math**<br>
 
-Interfield Math and Field Math can easily be accomplished.
+Field Math
 
-*Interfield*<br>
+*Option 1*<br>
+target field = number (op) field
 field 1 = 4000 / field 2
 
 (1, 2000),
@@ -30,9 +31,13 @@ field 1 = 4000 / field 2
 
 The field 1 becomes 2.
 
-*field math*<br>
+*Option 2*<br>
 
-A single field with an operation run on it.
+target field = field a (op) number
+
+*Option 3*<br>
+
+target field = field a (op) field b
 
 **Tokenizer** <br>
 
