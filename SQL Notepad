@@ -46,7 +46,6 @@
     border-bottom: 1px solid var(--border);
   }
   header h1 { margin: 0 0 6px; font-size: 20px; }
-  /* Keep vertical space where the paragraph used to be */
   header p { margin: 0; font-size: 14px; color: var(--muted); min-height: 1.4em; }
   kbd {
     background: var(--pill);
@@ -150,31 +149,28 @@
   .about-list kbd { font-size: 12px; }
 </style>
 </head>
-<body data-theme="dark">
+<body data-theme="light">
   <header>
     <h1>SQL Notepad</h1>
-    <!-- keep the vertical space, but no inline help text -->
     <p>&nbsp;</p>
   </header>
 
   <div class="bar">
     <span class="pill" id="countPill">Copy Board: 0 items</span>
-    <span class="pill" id="setCountPill">Set: 0 items</span>
-    <button id="clearBtn"      class="secondary" title="Clear the Copy Board">Clear Copy Board</button>
-    <button id="importBtn"     class="secondary" title="Import text from system clipboard">Import Clipboard</button>
+    <span class="pill" id="rowsCountPill">Set: 0 rows</span>
+    <button id="clearBtn"  class="secondary" title="Clear the Copy Board">Clear Copy Board</button>
+    <button id="importBtn" class="secondary" title="Import text from system clipboard">Import Clipboard</button>
 
     <button id="tokenizeBtn"   title="Replace last field in every tuple with a unique token">Tokenizer</button>
     <button id="nthFieldRemover" title="Remove the n’th field (1-based) from every tuple">Remove n’th Field</button>
+    <button id="addFieldBtn" title="Add a new field across all tuples">Add Field</button>
     <button id="mathButton"    title="Open math tools for field operations">Math</button>
 
     <div class="right">
       <button id="toggleBoardBtn" class="secondary" title="Hide/Show Copy Board">Hide Copy Board</button>
-      <button id="themeToggleBtn" class="secondary" title="Toggle theme">Light Theme</button>
-
       <!-- Help button (book icon) -->
       <button id="helpBtn" class="secondary" title="About / Help">
         <span class="icon">
-          <!-- book icon -->
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
                stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
             <path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"></path>
@@ -189,7 +185,7 @@
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
                stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
             <circle cx="12" cy="12" r="3"></circle>
-            <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09a1.65 1.65 0 0 0-1-1.51 1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a2 2 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09c.17 0 .35-.03.51-.1.61-.25 1-.85 1-1.51V9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06c.51.51 1.23.66 1.82.33H9c.66 0 1.26-.39 1.51-1V3a2 2 0 0 1 4 0v.09c.25.61.85 1 1.51 1h.09c.59.33 1.31.18 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06c-.51.51-.66 1.23-.33 1.82V9c0 .66.39 1.26 1 1.51.16.07.34.1.51.1H21a2 2 0 0 1 0 4h-.09c-.17 0-.35.03-.51.1-.61.25-1 .85-1 1.51z"></path>
+            <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09a1.65 1.65 0 0 0-1-1.51 1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a2 2 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09c.17 0 .35-.03 .51-.1 .61-.25 1-.85 1-1.51V9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06 .06c.51 .51 1.23 .66 1.82 .33H9c.66 0 1.26-.39 1.51-1V3a2 2 0 0 1 4 0v.09c.25 .61 .85 1 1.51 1h.09c.59 .33 1.31 .18 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06 .06c-.51 .51-.66 1.23-.33 1.82V9c0 .66 .39 1.26 1 1.51 .16 .07 .34 .1 .51 .1H21a2 2 0 0 1 0 4h-.09c-.17 0-.35 .03-.51 .1-.61 .25-1 .85-1 1.51z"></path>
           </svg>
           Settings
         </span>
@@ -232,6 +228,28 @@ line'></textarea>
     </div>
   </div>
 
+  <!-- Add Field Modal -->
+  <div class="overlay" id="add-field-modal">
+    <div class="dialog">
+      <div class="title">Add Field</div>
+      <div class="hint">Choose field type and where to insert it. Fields are <b>1-based</b>.</div>
+      <div class="row">
+        <label><input type="radio" name="newFieldType" value="number" checked> Number (0)</label>
+        <label><input type="radio" name="newFieldType" value="string"> String ('' )</label>
+      </div>
+      <div class="row">
+        <label>Insert after field #
+          <input type="number" id="addAfterInput" min="0" value="0" style="width:90px;">
+        </label>
+        <small class="hint">Use 0 to insert at the beginning.</small>
+      </div>
+      <div class="btns">
+        <button id="addFieldCancelBtn">Cancel</button>
+        <button id="addFieldApplyBtn" class="primary">Add Field</button>
+      </div>
+    </div>
+  </div>
+
   <!-- Math Modal -->
   <div class="overlay" id="math-modal">
     <div class="dialog">
@@ -259,6 +277,14 @@ line'></textarea>
         <button id="applyFieldFieldBtn" class="primary">Apply Field Ⓐ (op) Field Ⓑ → Target</button>
         <button id="mathCloseBtn">Close</button>
       </div>
+
+      <div class="divider"></div>
+
+      <div class="title" style="font-size:14px; margin:0;">Apply to</div>
+      <div class="row">
+        <label><input type="checkbox" id="mathScopeSet" checked> Current set (caret/selection)</label>
+        <label><input type="checkbox" id="mathScopeDoc"> Whole document</label>
+      </div>
     </div>
   </div>
 
@@ -267,12 +293,51 @@ line'></textarea>
     <div class="dialog">
       <div class="title">Settings</div>
       <div class="hint">Personalize editor behaviors.</div>
+
       <div class="row">
         <label>
           <input type="checkbox" id="clearTokenOnDup">
           Clear last field on duplicate (<kbd>Ctrl</kbd>+<kbd>D</kbd>)
         </label>
       </div>
+
+      <div class="row">
+        <label>
+          <input type="checkbox" id="tokenizerReplaceAll">
+          Tokenizer: replace <b>all</b> last fields (not just empty)
+        </label>
+      </div>
+
+      <div class="divider"></div>
+
+      <div class="title" style="font-size:14px; margin:0;">Token Style</div>
+      <div class="hint">Affects <em>Tokenizer</em> and <em>Ctrl+G</em> token generation.</div>
+      <div class="row">
+        <label>Style
+          <select id="tokenStyle">
+            <option value="alnum">Alpha-numeric (A-z, 0-9)</option>
+            <option value="alpha">Alpha only (A-z)</option>
+            <option value="upper">Uppercase (A-Z)</option>
+            <option value="lower">Lowercase (a-z)</option>
+          </select>
+        </label>
+        <label>Length
+          <input type="number" id="tokenLength" min="4" max="64" value="12" style="width:90px;">
+        </label>
+      </div>
+
+      <div class="divider"></div>
+
+      <div class="title" style="font-size:14px; margin:0;">Theme</div>
+      <div class="row">
+        <label>Theme
+          <select id="themeSelect">
+            <option value="light">Light</option>
+            <option value="dark">Dark</option>
+          </select>
+        </label>
+      </div>
+
       <div class="btns">
         <button id="settingsCloseBtn" class="primary">Done</button>
       </div>
@@ -288,11 +353,13 @@ line'></textarea>
         <ul>
           <li><kbd>Ctrl</kbd>+<kbd>B</kbd> – collect selection to Copy Board (removes it from editor)</li>
           <li><kbd>Ctrl</kbd>+<kbd>I</kbd> – dump Copy Board items into the n’th field across tuples</li>
+          <li><kbd>Ctrl</kbd>+<kbd>G</kbd> – insert a unique random token at the caret</li>
           <li><kbd>Ctrl</kbd>+<kbd>D</kbd> – duplicate current line (down). If enabled in <em>Settings</em>, clears the <em>last field</em> on the duplicate</li>
           <li><kbd>Ctrl</kbd>+<kbd>R</kbd> – remove current line, crimping content upward</li>
           <li><kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>V</kbd> – import clipboard into Copy Board</li>
-          <li><b>Tokenizer</b> – fills only empty last fields (<code>''</code> or <code>' '</code>) with unique tokens</li>
+          <li><b>Tokenizer</b> – fills only empty last fields (<code>''</code> or <code>' '</code>) with unique tokens; optionally replace <em>all</em> last fields via <em>Settings</em></li>
           <li><b>Remove n’th Field</b> – removes a 1-based field index from every tuple</li>
+          <li><b>Add Field</b> – inserts Number (<code>0</code>) or String (<code>''</code>) after the specified field index</li>
           <li><b>Math</b> – Interfield (Number & Field), Field Math (Field & Number), and Field vs Field → Target</li>
           <li><b>Copy Board</b> – accepts CSV, lines, or whitespace; includes Dedupe and Shuffle utilities</li>
         </ul>
@@ -314,8 +381,22 @@ const SETTINGS_KEY = 'sqlFieldDump.settings';
 function loadSettings() {
   try {
     const raw = localStorage.getItem(SETTINGS_KEY);
-    return raw ? JSON.parse(raw) : { clearTokenOnDuplicate: false }; // OFF by default ✅
-  } catch { return { clearTokenOnDuplicate: false }; }              // OFF by default ✅
+    return raw ? JSON.parse(raw) : {
+      clearTokenOnDuplicate: false,
+      tokenizerReplaceAll: false,
+      tokenStyle: 'alnum',
+      tokenLength: 12,
+      theme: 'light'
+    };
+  } catch {
+    return {
+      clearTokenOnDuplicate: false,
+      tokenizerReplaceAll: false,
+      tokenStyle: 'alnum',
+      tokenLength: 12,
+      theme: 'light'
+    };
+  }
 }
 function saveSettings(s) {
   try { localStorage.setItem(SETTINGS_KEY, JSON.stringify(s)); } catch {}
@@ -324,18 +405,19 @@ let SETTINGS = loadSettings();
 
 function applyTheme(theme) {
   document.body.setAttribute('data-theme', theme);
-  const themeBtn = document.getElementById('themeToggleBtn');
-  if (themeBtn) themeBtn.textContent = (theme === 'dark') ? 'Light Theme' : 'Dark Theme';
 }
 function toggleTheme() {
-  const current = document.body.getAttribute('data-theme') || 'dark';
+  const current = document.body.getAttribute('data-theme') || 'light';
   const next = current === 'dark' ? 'light' : 'dark';
   applyTheme(next);
   localStorage.setItem(THEME_KEY, next);
+  const themeSelect = document.getElementById('themeSelect');
+  if (themeSelect) themeSelect.value = next;
 }
 (function initTheme() {
-  const saved = localStorage.getItem(THEME_KEY);
-  applyTheme(saved || 'dark');
+  const savedSettings = SETTINGS.theme;
+  const legacy = localStorage.getItem(THEME_KEY);
+  applyTheme(savedSettings || legacy || 'light');
 })();
 
 function applyBoardVisibility(collapsed) {
@@ -363,7 +445,6 @@ function toggleBoard() {
   applyBoardVisibility(collapsed);
 })();
 
-document.getElementById('themeToggleBtn').addEventListener('click', toggleTheme);
 document.getElementById('toggleBoardBtn').addEventListener('click', toggleBoard);
 
 /* ============================
@@ -374,6 +455,7 @@ const textArea   = document.getElementById('textArea');
 const boardArea  = document.getElementById('board');
 const countPill  = document.getElementById('countPill');
 const parsePill  = document.getElementById('parsePill');
+const rowsCountPill = document.getElementById('rowsCountPill');
 
 function updateBoardView() {
   if (boardArea) boardArea.value = collectedItems.join('\n');
@@ -455,41 +537,7 @@ function syncFromBoard() {
 boardArea.addEventListener('input', syncFromBoard);
 
 /* ============================
-   Buttons
-============================ */
-const clearBtn     = document.getElementById('clearBtn');
-const importBtn    = document.getElementById('importBtn');
-const dedupeBtn    = document.getElementById('dedupeBtn');
-const shuffleBtn   = document.getElementById('shuffleBtn');
-const tokenizeBtn  = document.getElementById('tokenizeBtn');
-
-clearBtn.addEventListener('click', () => {
-  collectedItems.length = 0;
-  updateBoardView();
-});
-importBtn.addEventListener('click', async () => {
-  try {
-    const txt = await navigator.clipboard.readText();
-    pushItemsAuto(txt);
-  } catch {
-    alert('Clipboard read failed. Your browser may not allow it on this page.');
-  }
-});
-dedupeBtn.addEventListener('click', () => {
-  const seen = new Set(), next = [];
-  for (const it of collectedItems) if (!seen.has(it)) { seen.add(it); next.push(it); }
-  collectedItems.length = 0; collectedItems.push(...next); updateBoardView();
-});
-shuffleBtn.addEventListener('click', () => {
-  for (let i = collectedItems.length - 1; i > 0; i--) {
-    const j = Math.floor(Math.random() * (i + 1));
-    [collectedItems[i], collectedItems[j]] = [collectedItems[j], collectedItems[i]];
-  }
-  updateBoardView();
-});
-
-/* ============================
-   Caret/line utilities
+   Set detection & rows pill
 ============================ */
 function getLineIndexAndColumn(text, caretPos) {
   const lines = text.split(/\r?\n/);
@@ -499,14 +547,20 @@ function getLineIndexAndColumn(text, caretPos) {
     if (caretPos <= acc + len) {
       return { lines, lineIndex: i, column: caretPos - acc };
     }
-    acc += len + 1; // +1 for '\n'
+    acc += len + 1;
   }
   return { lines, lineIndex: lines.length - 1, column: lines[lines.length - 1].length };
 }
-
-/* ============================
-   Robust tuple parsing
-============================ */
+function expandToSetBounds(lines, startLine, endLine) {
+  const isBlank = (ln) => lines[ln].trim() === '';
+  let s = startLine;
+  while (s > 0 && !isBlank(s)) s--;
+  if (isBlank(s)) s++;
+  let e = endLine;
+  while (e < lines.length - 1 && !isBlank(e)) e++;
+  if (!isBlank(e)) e = e + 1;
+  return { start: s, end: e };
+}
 function findAllTuplesInLineSmart(line) {
   const tuples = [];
   let inQuote = false;
@@ -565,7 +619,42 @@ function findAllTuplesInLineSmart(line) {
   }
   return tuples;
 }
+function countTuplesInRange(lines, start, endExclusive) {
+  let count = 0;
+  for (let i = start; i < endExclusive; i++) {
+    const tuples = findAllTuplesInLineSmart(lines[i]);
+    if (tuples && tuples.length) count += tuples.length;
+  }
+  return count;
+}
+function updateRowsCountPill() {
+  if (!rowsCountPill || !textArea) return;
+  const text = textArea.value;
+  const selStart = textArea.selectionStart ?? 0;
+  const selEnd   = textArea.selectionEnd ?? selStart;
 
+  const infoStart = getLineIndexAndColumn(text, selStart);
+  const infoEnd   = getLineIndexAndColumn(text, Math.max(0, selEnd - (selEnd > 0 ? 1 : 0)));
+
+  const lines = infoStart.lines;
+  let startLine = infoStart.lineIndex;
+  let endLine   = infoEnd.lineIndex;
+
+  if (selStart !== selEnd) {
+    const bounds = expandToSetBounds(lines, Math.min(startLine, endLine), Math.max(startLine, endLine));
+    const count = countTuplesInRange(lines, bounds.start, bounds.end);
+    rowsCountPill.textContent = `Set: ${count} row${count===1?'':'s'}`;
+  } else {
+    if (lines[startLine].trim() === '') { rowsCountPill.textContent = 'Set: 0 rows'; return; }
+    const bounds = expandToSetBounds(lines, startLine, startLine);
+    const count = countTuplesInRange(lines, bounds.start, bounds.end);
+    rowsCountPill.textContent = `Set: ${count} row${count===1?'':'s'}`;
+  }
+}
+
+/* ============================
+   Field utilities
+============================ */
 function splitFieldsRobust(tupleRaw) {
   const inner = tupleRaw.slice(1, -1);
   const parts = [];
@@ -634,7 +723,7 @@ function countCommasBeforeIndexRobust(line, tupleOpen, indexInLine) {
 }
 
 document.addEventListener('keydown', function (event) {
-  // Collect: Ctrl+B  (free up Ctrl+A for Select All)
+  // Collect: Ctrl+B
   if (event.ctrlKey && event.key.toLowerCase() === 'b' && document.activeElement === textArea) {
     event.preventDefault();
 
@@ -649,6 +738,7 @@ document.addEventListener('keydown', function (event) {
     const after  = textArea.value.substring(end);
     textArea.value = before + after;
     textArea.setSelectionRange(start, start);
+    updateRowsCountPill();
     return;
   }
 
@@ -710,69 +800,91 @@ document.addEventListener('keydown', function (event) {
     textArea.value = lines.join('\n');
     textArea.setSelectionRange(caretPos, caretPos);
     updateBoardView();
+    updateRowsCountPill();
     return;
   }
 
-  // Duplicate line down: Ctrl+D  (insert AFTER the current line)
+  // Duplicate line down: Ctrl+D
   if (event.ctrlKey && event.key.toLowerCase() === 'd' && document.activeElement === textArea) {
     event.preventDefault();
     const pos = textArea.selectionStart;
     const { lines, lineIndex, column } = getLineIndexAndColumn(textArea.value, pos);
     const srcLine = lines[lineIndex];
 
-    // Prepare the duplicate (optionally clear LAST FIELD in every tuple on the NEW duplicate)
     let dup = srcLine;
     if (SETTINGS.clearTokenOnDuplicate) {
       dup = clearLastFieldInAllTuples(dup);
     }
 
-    // Insert the new duplicate AFTER the original line
     lines.splice(lineIndex + 1, 0, dup);
     textArea.value = lines.join('\n');
 
-    // Move caret to the duplicate at the same column
     let startOfNew = 0;
-    for (let i = 0; i <= lineIndex; i++) startOfNew += lines[i].length + 1; // after original\n
+    for (let i = 0; i <= lineIndex; i++) startOfNew += lines[i].length + 1;
     const newCaret = startOfNew + Math.min(column, lines[lineIndex + 1].length);
     textArea.setSelectionRange(newCaret, newCaret);
+    updateRowsCountPill();
     return;
   }
 
-  // Remove current line: Ctrl+R (crimp upward)
+  // Remove current line: Ctrl+R
   if (event.ctrlKey && event.key.toLowerCase() === 'r' && document.activeElement === textArea) {
     event.preventDefault();
     const pos = textArea.selectionStart;
     const { lines, lineIndex } = getLineIndexAndColumn(textArea.value, pos);
     if (!lines.length) return;
 
-    // Remove the current line and crimp content upward
     lines.splice(lineIndex, 1);
 
-    // Caret at start of the line now occupying this index
     const newIndex = Math.min(lineIndex, Math.max(0, lines.length - 1));
     let acc = 0;
     for (let i = 0; i < newIndex; i++) acc += lines[i].length + 1;
 
     textArea.value = lines.join('\n');
     textArea.setSelectionRange(acc, acc);
+    updateRowsCountPill();
+    return;
+  }
+
+  // Generate token: Ctrl+G
+  if (event.ctrlKey && event.key.toLowerCase() === 'g' && document.activeElement === textArea) {
+    event.preventDefault();
+    insertUniqueTokenAtCaret();
     return;
   }
 });
 
 /* ============================
-   Tokenizer (only fill empty last field)
+   Tokenizer & token generation
 ============================ */
-function generateToken(length) {
-  const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz';
+function generateTokenWithStyle(length, style) {
+  let chars = '';
+  switch (style) {
+    case 'alpha': chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz'; break;
+    case 'upper': chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ'; break;
+    case 'lower': chars = 'abcdefghijklmnopqrstuvwxyz'; break;
+    default:      chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789'; break;
+  }
   let token = '';
   for (let i = 0; i < length; i++) token += chars.charAt(Math.floor(Math.random() * chars.length));
   return token;
 }
-function getUniqueToken(existingContent, length) {
+function getUniqueToken(existingContent, length, style) {
   let token;
-  do { token = generateToken(length); } while (existingContent.includes(token));
+  do { token = generateTokenWithStyle(length, style); } while (existingContent.includes(token));
   return token;
 }
+function insertUniqueTokenAtCaret() {
+  if (!textArea) return;
+  const content = textArea.value;
+  const token = getUniqueToken(content, SETTINGS.tokenLength || 12, SETTINGS.tokenStyle || 'alnum');
+  const start = textArea.selectionStart;
+  const end   = textArea.selectionEnd;
+  textArea.value = content.slice(0, start) + token + content.slice(end);
+  const newPos = start + token.length;
+  textArea.setSelectionRange(newPos, newPos);
+}
+
 function isEmptyQuotedField(str) {
   const t = String(str).trim();
   if (!(t.startsWith("'") && t.endsWith("'"))) return false;
@@ -787,10 +899,21 @@ function replaceLastFieldWithQuotedTokenIfEmpty(tupleRaw, token) {
   parts[parts.length - 1] = `'${String(token).replace(/'/g, "''")}'`;
   return joinFields(parts);
 }
+function replaceLastFieldWithTokenAlways(tupleRaw, token) {
+  const parts = splitFieldsRobust(tupleRaw);
+  if (!parts.length) return tupleRaw;
+  const last = parts[parts.length - 1];
+  const replacement = isQuoted(last) ? `'${String(token).replace(/'/g, "''")}'` : String(token);
+  parts[parts.length - 1] = replacement;
+  return joinFields(parts);
+}
 document.getElementById('tokenizeBtn').addEventListener('click', () => {
   if (!textArea) return;
   let content = textArea.value;
   const lines = content.split(/\r?\n/);
+  const replaceAll = !!SETTINGS.tokenizerReplaceAll;
+  const len = SETTINGS.tokenLength || 12;
+  const style = SETTINGS.tokenStyle || 'alnum';
 
   for (let li = 0; li < lines.length; li++) {
     const line = lines[li];
@@ -802,11 +925,13 @@ document.getElementById('tokenizeBtn').addEventListener('click', () => {
     let newLine = line;
     for (let k = tuples.length - 1; k >= 0; k--) {
       const t = tuples[k];
-      const candidateToken = getUniqueToken(content, 12);
+      const token = getUniqueToken(content, len, style);
 
       const before = newLine.slice(0, t.open);
       const after  = newLine.slice(t.close);
-      const replacedTuple = replaceLastFieldWithQuotedTokenIfEmpty(t.raw, candidateToken);
+      const replacedTuple = replaceAll
+        ? replaceLastFieldWithTokenAlways(t.raw, token)
+        : replaceLastFieldWithQuotedTokenIfEmpty(t.raw, token);
 
       if (replacedTuple !== t.raw) {
         newLine = before + replacedTuple + after;
@@ -820,10 +945,11 @@ document.getElementById('tokenizeBtn').addEventListener('click', () => {
     lines[li] = newLine;
   }
   textArea.value = lines.join('\n');
+  updateRowsCountPill();
 });
 
 /* ============================
-   Remove n’th Field (1-based UI)
+   Remove n’th Field
 ============================ */
 const nthModal      = document.getElementById('nth-remover-modal');
 const nthInput      = document.getElementById('nthIndexInput');
@@ -867,6 +993,7 @@ nthApplyBtn.addEventListener('click', () => {
   if (!Number.isInteger(idx1) || idx1 < 1) { alert('Enter an integer ≥ 1.'); return; }
   removeFieldAcrossDocument(idx1 - 1);
   nthModal.style.display = 'none';
+  updateRowsCountPill();
 });
 nthInput.addEventListener('keydown', (e) => {
   if (e.key === 'Enter') nthApplyBtn.click();
@@ -874,7 +1001,57 @@ nthInput.addEventListener('keydown', (e) => {
 });
 
 /* ============================
-   Math Popup (Interfield + Field + Field-vs-Field)
+   Add Field modal
+============================ */
+const addFieldModal = document.getElementById('add-field-modal');
+const addFieldBtn   = document.getElementById('addFieldBtn');
+const addAfterInput = document.getElementById('addAfterInput');
+const addFieldCancelBtn = document.getElementById('addFieldCancelBtn');
+const addFieldApplyBtn  = document.getElementById('addFieldApplyBtn');
+
+addFieldBtn.addEventListener('click', () => {
+  addFieldModal.style.display = 'flex';
+  setTimeout(() => addAfterInput.focus(), 0);
+});
+addFieldCancelBtn.addEventListener('click', () => addFieldModal.style.display = 'none');
+addFieldModal.addEventListener('click', (e) => { if (e.target === addFieldModal) addFieldCancelBtn.click(); });
+
+function addFieldInTuple(tupleRaw, insertAfterN1Based, type) {
+  const parts = splitFieldsRobust(tupleRaw);
+  const insertIndex = Math.max(0, Math.min(parts.length, (Number(insertAfterN1Based) || 0)));
+  const newVal = (type === 'number') ? '0' : "''";
+  parts.splice(insertIndex, 0, newVal);
+  return joinFields(parts);
+}
+function addFieldAcrossDocument(insertAfterN1Based, type) {
+  const lines = textArea.value.split(/\r?\n/);
+  for (let i = 0; i < lines.length; i++) {
+    const tuples = findAllTuplesInLineSmart(lines[i]);
+    if (!tuples.length) continue;
+    let out = lines[i];
+    for (let k = tuples.length - 1; k >= 0; k--) {
+      const t = tuples[k];
+      const before = out.slice(0, t.open);
+      const after  = out.slice(t.close);
+      const replaced = addFieldInTuple(t.raw, insertAfterN1Based, type);
+      out = before + replaced + after;
+    }
+    lines[i] = out;
+  }
+  textArea.value = lines.join('\n');
+}
+
+addFieldApplyBtn.addEventListener('click', () => {
+  const type = (document.querySelector('input[name="newFieldType"]:checked') || {}).value || 'number';
+  const afterN = Number(addAfterInput.value);
+  if (!Number.isInteger(afterN) || afterN < 0) { alert('Insert-after must be an integer ≥ 0.'); return; }
+  addFieldAcrossDocument(afterN, type);
+  addFieldModal.style.display = 'none';
+  updateRowsCountPill();
+});
+
+/* ============================
+   Math popup (scope + ops)
 ============================ */
 const mathModal = document.getElementById('math-modal');
 const interfieldRow = document.getElementById('interfieldRow');
@@ -884,6 +1061,8 @@ const applyInterfieldBtn = document.getElementById('applyInterfieldBtn');
 const applyFieldBtn = document.getElementById('applyFieldBtn');
 const applyFieldFieldBtn = document.getElementById('applyFieldFieldBtn');
 const mathCloseBtn = document.getElementById('mathCloseBtn');
+const scopeSetChk = document.getElementById('mathScopeSet');
+const scopeDocChk = document.getElementById('mathScopeDoc');
 
 function mk(labelText, el) {
   const lab = document.createElement('label');
@@ -905,7 +1084,7 @@ function makeSelect(options) {
 }
 function makeRoundingSelect() { return makeSelect(['none','up','down']); }
 
-// Interfield controls (Target = Number (op) Source [or flipped])
+// Interfield controls
 const if_target = makeNumberInput(1, 1, '80px');
 const if_op     = makeSelect(['+','-','*','/']);
 const if_source = makeNumberInput(2, 1, '80px');
@@ -921,7 +1100,7 @@ interfieldRow.appendChild(mk('Rounding', if_round));
 const if_flipWrap = document.createElement('label'); if_flipWrap.appendChild(if_flip); if_flipWrap.appendChild(document.createTextNode(' Flip Order'));
 interfieldRow.appendChild(if_flipWrap);
 
-// Field Math controls (Field = Field (op) Number [or flipped])
+// Field Math controls
 const fm_field = makeNumberInput(1, 1, '80px');
 const fm_op    = makeSelect(['+','-','*','/']);
 const fm_num   = (() => { const n = makeNumberInput(1, null, '120px'); n.step = 'any'; return n; })();
@@ -935,7 +1114,7 @@ fieldRow.appendChild(mk('Rounding', fm_round));
 const fm_flipWrap = document.createElement('label'); fm_flipWrap.appendChild(fm_flip); fm_flipWrap.appendChild(document.createTextNode(' Flip Order'));
 fieldRow.appendChild(fm_flipWrap);
 
-// Field Ⓐ (op) Field Ⓑ into Target controls
+// Field Ⓐ (op) Field Ⓑ controls
 const ff_target = makeNumberInput(1, 1, '80px');
 const ff_op     = makeSelect(['+','-','*','/']);
 const ff_a      = makeNumberInput(1, 1, '80px');
@@ -948,20 +1127,49 @@ fieldFieldRow.appendChild(mk('Field Ⓐ', ff_a));
 fieldFieldRow.appendChild(mk('Field Ⓑ', ff_b));
 fieldFieldRow.appendChild(mk('Rounding', ff_round));
 
-// Open/close modal
+// open/close
 document.getElementById('mathButton').addEventListener('click', () => {
   mathModal.style.display = 'flex';
+  // default scope: current set
+  scopeSetChk.checked = true;
+  scopeDocChk.checked = false;
   setTimeout(() => if_target.focus(), 0);
 });
 mathCloseBtn.addEventListener('click', () => mathModal.style.display = 'none');
 mathModal.addEventListener('click', (e) => { if (e.target === mathModal) mathCloseBtn.click(); });
 
-// Apply logic
-function applyMathAcrossDocument(opts) {
-  const { targetIdx0, sourceIdx0, op, constant, rounding, flipOrder } = opts;
-  const lines = textArea.value.split(/\r?\n/);
+// enforce radio-like behavior for scope checkboxes
+scopeSetChk.addEventListener('change', () => {
+  if (scopeSetChk.checked) scopeDocChk.checked = false;
+  else if (!scopeDocChk.checked) scopeSetChk.checked = true;
+});
+scopeDocChk.addEventListener('change', () => {
+  if (scopeDocChk.checked) scopeSetChk.checked = false;
+  else if (!scopeSetChk.checked) scopeDocChk.checked = true;
+});
 
-  for (let li = 0; li < lines.length; li++) {
+function computeSetBoundsFromSelection(lines) {
+  const selStart = textArea.selectionStart ?? 0;
+  const selEnd   = textArea.selectionEnd ?? selStart;
+  const infoStart = getLineIndexAndColumn(textArea.value, selStart);
+  const infoEnd   = getLineIndexAndColumn(textArea.value, Math.max(0, selEnd - (selEnd > 0 ? 1 : 0)));
+  const startLine = Math.min(infoStart.lineIndex, infoEnd.lineIndex);
+  const endLine   = Math.max(infoStart.lineIndex, infoEnd.lineIndex);
+  return expandToSetBounds(lines, startLine, endLine);
+}
+
+function getScopeBounds() {
+  const lines = textArea.value.split(/\r?\n/);
+  if (scopeDocChk.checked) return { lines, start: 0, end: lines.length };
+  const bounds = computeSetBoundsFromSelection(lines);
+  return { lines, start: bounds.start, end: bounds.end };
+}
+
+function applyMathAcrossRange(opts, range) {
+  const { targetIdx0, sourceIdx0, op, constant, rounding, flipOrder } = opts;
+  const { lines, start, end } = range;
+
+  for (let li = start; li < end; li++) {
     let line = lines[li];
     if (!line.trim()) continue;
 
@@ -1013,11 +1221,11 @@ function applyMathAcrossDocument(opts) {
   textArea.value = lines.join('\n');
 }
 
-function applyFieldMathAcrossDocument(opts) {
+function applyFieldMathAcrossRange(opts, range) {
   const { fieldIdx0, op, constant, rounding, flipOrder } = opts;
-  const lines = textArea.value.split(/\r?\n/);
+  const { lines, start, end } = range;
 
-  for (let li = 0; li < lines.length; li++) {
+  for (let li = start; li < end; li++) {
     let line = lines[li];
     if (!line.trim()) continue;
 
@@ -1066,11 +1274,11 @@ function applyFieldMathAcrossDocument(opts) {
   textArea.value = lines.join('\n');
 }
 
-function applyFieldOpFieldToTargetAcrossDocument(opts) {
+function applyFieldOpFieldToTargetAcrossRange(opts, range) {
   const { targetIdx0, aIdx0, bIdx0, op, rounding } = opts;
-  const lines = textArea.value.split(/\r?\n/);
+  const { lines, start, end } = range;
 
-  for (let li = 0; li < lines.length; li++) {
+  for (let li = start; li < end; li++) {
     let line = lines[li];
     if (!line.trim()) continue;
 
@@ -1117,6 +1325,7 @@ function applyFieldOpFieldToTargetAcrossDocument(opts) {
   textArea.value = lines.join('\n');
 }
 
+// apply buttons use scope
 applyInterfieldBtn.addEventListener('click', () => {
   const tgt1 = Number(if_target.value);
   const src1 = Number(if_source.value);
@@ -1131,13 +1340,15 @@ applyInterfieldBtn.addEventListener('click', () => {
   if (!['+','-','*','/'].includes(op)) { alert('Choose a valid operation.'); return; }
   if (!['none','up','down'].includes(rnd)) { alert('Choose a valid rounding mode.'); return; }
 
-  applyMathAcrossDocument({
+  const range = getScopeBounds();
+  applyMathAcrossRange({
     targetIdx0: tgt1 - 1,
     sourceIdx0: src1 - 1,
     op, constant: val,
     rounding: rnd,
     flipOrder: flip
-  });
+  }, range);
+  updateRowsCountPill();
 });
 
 applyFieldBtn.addEventListener('click', () => {
@@ -1152,12 +1363,14 @@ applyFieldBtn.addEventListener('click', () => {
   if (!['+','-','*','/'].includes(op)) { alert('Choose a valid operation.'); return; }
   if (!['none','up','down'].includes(rnd)) { alert('Choose a valid rounding mode.'); return; }
 
-  applyFieldMathAcrossDocument({
+  const range = getScopeBounds();
+  applyFieldMathAcrossRange({
     fieldIdx0: fld1 - 1,
     op, constant: val,
     rounding: rnd,
     flipOrder: flip
-  });
+  }, range);
+  updateRowsCountPill();
 });
 
 applyFieldFieldBtn.addEventListener('click', () => {
@@ -1173,13 +1386,15 @@ applyFieldFieldBtn.addEventListener('click', () => {
   if (!['+','-','*','/'].includes(op)) { alert('Choose a valid operation.'); return; }
   if (!['none','up','down'].includes(rnd)) { alert('Choose a valid rounding mode.'); return; }
 
-  applyFieldOpFieldToTargetAcrossDocument({
+  const range = getScopeBounds();
+  applyFieldOpFieldToTargetAcrossRange({
     targetIdx0: tgt1 - 1,
     aIdx0: a1 - 1,
     bIdx0: b1 - 1,
     op,
     rounding: rnd
-  });
+  }, range);
+  updateRowsCountPill();
 });
 
 /* ============================
@@ -1189,32 +1404,50 @@ const settingsModal = document.getElementById('settings-modal');
 const settingsBtn   = document.getElementById('settingsBtn');
 const settingsClose = document.getElementById('settingsCloseBtn');
 const clearOnDupChk = document.getElementById('clearTokenOnDup');
+const tokenizerReplaceAllChk = document.getElementById('tokenizerReplaceAll');
+const tokenStyleSel = document.getElementById('tokenStyle');
+const tokenLengthInp= document.getElementById('tokenLength');
+const themeSelect   = document.getElementById('themeSelect');
 
 function openSettings() {
   clearOnDupChk.checked = !!SETTINGS.clearTokenOnDuplicate;
+  tokenizerReplaceAllChk.checked = !!SETTINGS.tokenizerReplaceAll;
+  tokenStyleSel.value = SETTINGS.tokenStyle || 'alnum';
+  tokenLengthInp.value = SETTINGS.tokenLength || 12;
+  themeSelect.value = (document.body.getAttribute('data-theme') || SETTINGS.theme || 'light');
   settingsModal.style.display = 'flex';
 }
 function closeSettings() {
   SETTINGS.clearTokenOnDuplicate = !!clearOnDupChk.checked;
+  SETTINGS.tokenizerReplaceAll = !!tokenizerReplaceAllChk.checked;
+  SETTINGS.tokenStyle = String(tokenStyleSel.value || 'alnum');
+  const len = Number(tokenLengthInp.value);
+  SETTINGS.tokenLength = (Number.isInteger(len) && len >= 4 && len <= 64) ? len : 12;
+  SETTINGS.theme = String(themeSelect.value || 'light');
   saveSettings(SETTINGS);
+  applyTheme(SETTINGS.theme);
   settingsModal.style.display = 'none';
 }
 settingsBtn.addEventListener('click', openSettings);
 settingsClose.addEventListener('click', closeSettings);
 settingsModal.addEventListener('click', (e) => { if (e.target === settingsModal) closeSettings(); });
-// Save immediately on change
-clearOnDupChk.addEventListener('change', () => {
-  SETTINGS.clearTokenOnDuplicate = !!clearOnDupChk.checked;
-  saveSettings(SETTINGS);
+// immediate save hooks (optional)
+clearOnDupChk.addEventListener('change', () => { SETTINGS.clearTokenOnDuplicate = !!clearOnDupChk.checked; saveSettings(SETTINGS); });
+tokenizerReplaceAllChk.addEventListener('change', () => { SETTINGS.tokenizerReplaceAll = !!tokenizerReplaceAllChk.checked; saveSettings(SETTINGS); });
+tokenStyleSel.addEventListener('change', () => { SETTINGS.tokenStyle = tokenStyleSel.value; saveSettings(SETTINGS); });
+tokenLengthInp.addEventListener('change', () => {
+  const v = Number(tokenLengthInp.value);
+  if (Number.isInteger(v) && v>=4 && v<=64) { SETTINGS.tokenLength = v; saveSettings(SETTINGS); }
 });
+themeSelect.addEventListener('change', () => { SETTINGS.theme = themeSelect.value; saveSettings(SETTINGS); applyTheme(SETTINGS.theme); });
 
 /* ============================
-   Helpers to clear LAST field in tuples (used by Ctrl+D)
+   Helpers to clear LAST field (Ctrl+D)
 ============================ */
 function clearLastFieldInTuple(tupleRaw) {
   const parts = splitFieldsRobust(tupleRaw);
   if (!parts.length) return tupleRaw;
-  parts[parts.length - 1] = "''"; // always set to empty string
+  parts[parts.length - 1] = "''";
   return joinFields(parts);
 }
 function clearLastFieldInAllTuples(line) {
@@ -1243,10 +1476,19 @@ aboutClose.addEventListener('click', () => { aboutModal.style.display = 'none'; 
 aboutModal.addEventListener('click', (e) => { if (e.target === aboutModal) aboutClose.click(); });
 
 /* ============================
+   Live updates for rows pill
+============================ */
+textArea.addEventListener('input', updateRowsCountPill);
+textArea.addEventListener('keyup', updateRowsCountPill);
+textArea.addEventListener('mouseup', updateRowsCountPill);
+textArea.addEventListener('select', updateRowsCountPill);
+
+/* ============================
    Init
 ============================ */
 updateBoardView();
 setParseModeLabel('Auto');
+updateRowsCountPill();
 </script>
 </body>
 </html>
