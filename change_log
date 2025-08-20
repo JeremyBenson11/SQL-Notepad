@@ -6,7 +6,7 @@ Aug 20th, 2025
 * Added a token style and length option in the settings.
 * Math can now be applied to a set of tuples or the entire document.
 * Tokenizer has setting to replace all end tokens on tokenize, or only currently blank fields.
-* ctrl+g will generate a random token unique at caret location. 
+* ctrl+g will generate a random unique token at caret location. 
 
 Aug 19th, 2025
 
