@@ -1,3 +1,13 @@
+Aug 20th, 2025
+
+* Added add field button, understanding numerical or string field.
+* Row count output now shows rows in current selected set of tuples.
+* Theme is now controlled through settings only.
+* Added a token style and length option in the settings.
+* Math can now be applied to a set of tuples or the entire document.
+* Tokenizer has setting to replace all end tokens on tokenize, or only currently blank fields.
+* ctrl+g will generate a random token unique at caret location. 
+
 Aug 19th, 2025
 
 1. ctrl+a has been changed to ctrl+b to add list to Copy Board, ctrl+a now selects all text.
