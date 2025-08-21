@@ -6,147 +6,226 @@
 <meta name="viewport" content="width=device-width,initial-scale=1" />
 <style>
   :root {
-    --bg:#0f172a;
-    --bg2:#0b1327;
-    --panel:#0d1326;
-    --editor:#0b1020;
-    --fg:#e5e7eb;
-    --muted:#94a3b8;
-    --border:#1f2a44;
-    --accent:#d9534f;
-    --accent-hover:#c9302c;
-    --pill:#111827;
-  }
-  [data-theme="light"] {
-    --bg:#f8fafc;
-    --bg2:#eef2f7;
-    --panel:#ffffff;
-    --editor:#ffffff;
-    --fg:#0f172a;
-    --muted:#475569;
-    --border:#d1d5db;
-    --accent:#0ea5e9;
-    --accent-hover:#0284c7;
-    --pill:#e5e7eb;
-  }
+  --bg:#0f172a;
+  --bg2:#0b1327;
+  --panel:#0d1326;
+  --editor:#0b1020;
+  --fg:#e5e7eb;
+  --muted:#94a3b8;
+  --border:#1f2a44;
+  --accent:#d9534f;
+  --accent-hover:#c9302c;
+  --pill:#111827;
+}
+[data-theme="light"] {
+  --bg:#f8fafc;
+  --bg2:#eef2f7;
+  --panel:#ffffff;
+  --editor:#ffffff;
+  --fg:#0f172a;
+  --muted:#475569;
+  --border:#d1d5db;
+  --accent:#0ea5e9;
+  --accent-hover:#0284c7;
+  --pill:#e5e7eb;
+}
 
-  * { box-sizing: border-box; }
-  html, body { height: 100%; margin: 0; }
-  body {
-    font-family: Arial, sans-serif;
-    display: grid;
-    grid-template-rows: auto auto 1fr;
-    background: var(--bg);
-    color: var(--fg);
-  }
+* { box-sizing: border-box; }
+html, body { height: 100%; }
+body {
+  font-family: Arial, sans-serif;
+  display: grid;
+  grid-template-rows: auto auto 1fr;
+  background: var(--bg);
+  color: var(--fg);
+  min-height: 100vh; /* ensure full viewport height */
+}
 
-  header {
-    padding: 16px 20px;
-    background: var(--bg);
-    border-bottom: 1px solid var(--border);
-  }
-  header h1 { margin: 0 0 6px; font-size: 20px; }
-  header p { margin: 0; font-size: 14px; color: var(--muted); min-height: 1.4em; }
-  kbd {
-    background: var(--pill);
-    border: 1px solid var(--border);
-    border-bottom-width: 2px;
-    border-radius: 6px;
-    padding: 2px 6px;
-    font-family: inherit;
-    font-size: 12px;
-    color: var(--fg);
-  }
+/* When interface is hidden, drop the bar row */
+body.interface-hidden { grid-template-rows: auto 1fr; }
 
-  .bar {
-    display:flex; gap:8px; align-items:center; padding:8px 20px;
-    background: var(--bg2); color: var(--fg);
-    border-bottom:1px solid var(--border);
-    flex-wrap: wrap;
-  }
-  .bar .right {
-    margin-left:auto; display:flex; gap:8px; align-items:center; flex-wrap:nowrap;
-    white-space:nowrap;
-  }
-  .pill {
-    background: var(--pill);
-    padding: 4px 8px;
-    border-radius: 999px;
-    font-size: 12px;
-    border: 1px solid var(--border);
-  }
-  .bar button {
-    padding:8px 10px; font-size:14px; cursor:pointer; border:none; color:white;
-    background: var(--accent); border-radius:8px;
-  }
-  .bar button.secondary {
-    background: transparent; color: var(--fg);
-    border: 1px solid var(--border);
-  }
-  .bar button:hover { background: var(--accent-hover); }
-  .bar button.secondary:hover { background: var(--panel); }
+header {
+  padding: 16px 20px;
+  background: var(--bg);
+  border-bottom: 1px solid var(--border);
+}
+/* Slim header when interface hidden */
+body.interface-hidden header { padding: 6px 12px; }
+header h1 { margin: 0 0 6px; font-size: 20px; }
+header p { margin: 0; font-size: 14px; color: var(--muted); min-height: 1.4em; }
+kbd {
+  background: var(--pill);
+  border: 1px solid var(--border);
+  border-bottom-width: 2px;
+  border-radius: 6px;
+  padding: 2px 6px;
+  font-family: inherit;
+  font-size: 12px;
+  color: var(--fg);
+}
 
-  .wrap {
-    display:grid; grid-template-columns: 300px 1fr; gap:0; height: 100%;
-  }
-  .wrap.board-hidden { grid-template-columns: 1fr; }
-  aside.panel {
-    background: var(--panel); border-right:1px solid var(--border);
-    display:flex; flex-direction:column;
-  }
-  aside.panel.hidden { display:none; }
-  aside.panel h2 { margin: 12px 12px 4px; font-size:14px; color: var(--fg); font-weight:600; }
-  aside.panel small { margin: 0 12px 8px; color: var(--muted); }
-  #board {
-    margin: 0 12px 12px; flex:1; resize:none; width: calc(100% - 24px);
-    background: var(--editor); color: var(--fg); border:1px solid var(--border);
-    border-radius:8px; padding:10px;
-    font-family: ui-monospace, Menlo, Consolas, monospace; font-size:13px; line-height:1.4;
-  }
-  .panel .row { display:flex; gap:8px; padding:0 12px 12px; }
-  .panel .row button { flex:1; }
+.bar {
+  display:flex; gap:8px; align-items:center; padding:8px 20px;
+  background: var(--bg2); color: var(--fg);
+  border-bottom:1px solid var(--border);
+  flex-wrap: wrap;
+}
+/* Hide top bar when interface hidden */
+body.interface-hidden .bar { display:none; }
 
-  textarea#textArea {
-    width: 100%; height: 100%;
-    font-size: 16px; padding: 14px; border: none; outline: none;
-    background: var(--editor); color: var(--fg);
-    font-family: ui-monospace, Menlo, Consolas, monospace;
-  }
+.bar .right {
+  margin-left:auto; display:flex; gap:8px; align-items:center; flex-wrap:nowrap;
+  white-space:nowrap;
+}
+.pill {
+  background: var(--pill);
+  padding: 4px 8px;
+  border-radius: 999px;
+  font-size: 12px;
+  border: 1px solid var(--border);
+}
+.bar button {
+  padding:8px 10px; font-size:14px; cursor:pointer; border:none; color:white;
+  background: var(--accent); border-radius:8px;
+}
+.bar button.secondary {
+  background: transparent; color: var(--fg);
+  border: 1px solid var(--border);
+}
+.bar button:hover { background: var(--accent-hover); }
+.bar button.secondary:hover { background: var(--panel); }
 
-  /* Modal shared styles */
-  .overlay {
-    position: fixed; inset: 0; background: rgba(0,0,0,0.5);
-    display: none; align-items: center; justify-content: center; z-index: 9999;
-  }
-  .dialog {
-    width: 720px; max-width: 95%; padding: 16px;
-    border-radius: 12px; background: var(--panel); color: var(--fg);
-    border: 1px solid var(--border); font-family: Arial, sans-serif;
-    box-shadow: 0 10px 30px rgba(0,0,0,0.35);
-  }
-  .dialog .title { font-size: 16px; font-weight: 700; margin-bottom: 6px; }
-  .dialog .hint { font-size: 13px; color: var(--muted); margin-bottom: 10px; }
-  .dialog .row { display:flex; flex-wrap:wrap; gap:10px; margin-bottom:12px; }
-  .dialog label { font-size: 14px; display:flex; align-items:center; gap:6px; }
-  .dialog input[type="number"], .dialog select {
-    padding: 8px; border-radius: 8px; border: 1px solid var(--border);
-    background: var(--editor); color: var(--fg);
-  }
-  .dialog .btns { display:flex; gap:8px; justify-content:flex-end; margin-top: 8px; }
-  .dialog button {
-    padding:10px 12px; border-radius:8px; cursor:pointer;
-    border:1px solid var(--border); background: var(--bg2); color: var(--fg);
-  }
-  .dialog button.primary { border:none; background: var(--accent); color:#fff; }
-  .dialog button.primary:hover { background: var(--accent-hover); }
+.wrap {
+  display:grid; grid-template-columns: 300px 1fr; gap:0; height: 100%;
+  min-height: 0; /* allow child to stretch correctly */
+}
+.wrap.board-hidden { grid-template-columns: 1fr; }
+aside.panel {
+  background: var(--panel); border-right:1px solid var(--border);
+  display:flex; flex-direction:column;
+}
+aside.panel.hidden { display:none; }
+/* Hide copy board when interface hidden */
+body.interface-hidden aside.panel { display:none !important; }
+body.interface-hidden .wrap { grid-template-columns: 1fr !important; }
 
-  .divider { height:1px; background: var(--border); margin: 12px 0; }
+aside.panel h2 { margin: 12px 12px 4px; font-size:14px; color: var(--fg); font-weight:600; }
+aside.panel small { margin: 0 12px 8px; color: var(--muted); }
+#board {
+  margin: 0 12px 12px; flex:1; resize:none; width: calc(100% - 24px);
+  background: var(--editor); color: var(--fg); border:1px solid var(--border);
+  border-radius:8px; padding:10px;
+  font-family: ui-monospace, Menlo, Consolas, monospace; font-size:13px; line-height:1.4;
+}
+.panel .row { display:flex; gap:8px; padding:0 12px 12px; }
+.panel .row button { flex:1; }
 
-  .icon { display:inline-flex; align-items:center; gap:6px; }
-  .icon svg { width:16px; height:16px; vertical-align:middle; }
+textarea#textArea {
+  width: 100%; height: 100%;
+  font-size: 16px; padding: 14px; border: none; outline: none;
+  background: var(--editor); color: var(--fg);
+  font-family: ui-monospace, Menlo, Consolas, monospace;
+}
+/* Add a slight left margin when interface hidden */
+body.interface-hidden textarea#textArea { margin-left: 12px; }
 
-  .about-list { line-height: 1.6; font-size: 14px; color: var(--fg); }
-  .about-list kbd { font-size: 12px; }
+/* Modal shared styles */
+.overlay {
+  position: fixed; inset: 0; background: rgba(0,0,0,0.5);
+  display: none; align-items: center; justify-content: center; z-index: 9999;
+}
+.dialog {
+  width: 720px; max-width: 95%; padding: 16px;
+  border-radius: 12px; background: var(--panel); color: var(--fg);
+  border: 1px solid var(--border); font-family: Arial, sans-serif;
+  box-shadow: 0 10px 30px rgba(0,0,0,0.35);
+}
+.dialog .title { font-size: 16px; font-weight: 700; margin-bottom: 6px; }
+.dialog .hint { font-size: 13px; color: var(--muted); margin-bottom: 10px; }
+.dialog .row { display:flex; flex-wrap:wrap; gap:10px; margin-bottom:12px; }
+.dialog label { font-size: 14px; display:flex; align-items:center; gap:6px; }
+.dialog input[type="number"], .dialog select {
+  padding: 8px; border-radius: 8px; border: 1px solid var(--border);
+  background: var(--editor); color: var(--fg);
+}
+.dialog .btns { display:flex; gap:8px; justify-content:flex-end; margin-top: 8px; }
+.dialog button {
+  padding:10px 12px; border-radius:8px; cursor:pointer;
+  border:1px solid var(--border); background: var(--bg2); color: var(--fg);
+}
+.dialog button.primary { border:none; background: var(--accent); color:#fff; }
+.dialog button.primary:hover { background: var(--accent-hover); }
+
+.divider { height:1px; background: var(--border); margin: 12px 0; }
+
+.icon { display:inline-flex; align-items:center; gap:6px; }
+.icon svg { width:16px; height:16px; vertical-align:middle; }
+
+.about-list { line-height: 1.6; font-size: 14px; color: var(--fg); }
+.about-list kbd { font-size: 12px; }
+
+/* ===== Duplicate end token highlighter overlay ===== */
+#highlightOverlay {
+  position: fixed;
+  inset: auto auto auto auto; /* set dynamically via JS to match the textarea */
+  pointer-events: none;
+  white-space: pre-wrap;
+  word-break: break-word;
+  overflow: hidden;
+  z-index: 999; /* under modals, over editor */
+  color: transparent; /* base text hidden */
+}
+
+/* Safety button to restore UI when hidden */
+#showControlsBtn {
+  position: fixed;
+  top: 8px;
+  right: 8px;            /* moved to far right */
+  z-index: 10000;
+  display: none;
+  background: var(--accent);
+  color: #fff;
+  border: none;
+  border-radius: 8px;
+  padding: 8px 10px;
+  cursor: pointer;
+  box-shadow: 0 4px 12px rgba(0,0,0,.25);
+}
+
+/* === Duplicate End Tokens Modal === */
+#dupesListWrap { border:1px solid var(--border); border-radius:10px; background:var(--editor); }
+#dupesHeader { display:flex; align-items:center; justify-content:space-between; gap:8px; margin-bottom:8px; }
+#dupesCount { font-size:13px; color:var(--muted); }
+#dupesSearch {
+  width:240px; padding:8px 10px; border-radius:8px; border:1px solid var(--border);
+  background:var(--bg2); color:var(--fg);
+}
+#dupesList {
+  max-height: 360px; overflow:auto; padding:6px;
+  border-top:1px dashed var(--border);
+}
+.dupeItem {
+  display:flex; align-items:center; justify-content:space-between; gap:10px;
+  padding:8px 10px; border-bottom:1px dashed var(--border);
+}
+.dupeItem:last-child { border-bottom:none; }
+.dupeToken { font-family: ui-monospace, Menlo, Consolas, monospace; word-break:break-all; }
+.dupeBadge {
+  background: var(--pill); border:1px solid var(--border);
+  border-radius:999px; padding:2px 8px; font-size:12px;
+}
+.dupeActions { display:flex; gap:6px; }
+.dupeBtn {
+  padding:6px 8px; border-radius:8px; cursor:pointer;
+  border:1px solid var(--border); background:var(--bg2); color:var(--fg);
+}
+.dupeBtn:hover { background: var(--panel); }
+
+
+/* */
+
+body.interface-hidden #showControlsBtn { display: inline-block; }
+
 </style>
 </head>
 <body data-theme="light">
@@ -162,7 +241,7 @@
     <button id="importBtn" class="secondary" title="Import text from system clipboard">Import Clipboard</button>
 
     <button id="tokenizeBtn"   title="Replace last field in every tuple with a unique token">Tokenizer</button>
-    <button id="nthFieldRemover" title="Remove the n’th field (1-based) from every tuple">Remove n’th Field</button>
+    <button id="nthFieldRemover" title="Remove the n’th field (1-based) from every tuple">Remove Field</button>
     <button id="addFieldBtn" title="Add a new field across all tuples">Add Field</button>
     <button id="mathButton"    title="Open math tools for field operations">Math</button>
 
@@ -211,6 +290,10 @@ line'></textarea>
     <textarea id="textArea" placeholder="Paste or type SQL here…"></textarea>
   </div>
 
+  <!-- Highlighter overlay & safety show-controls button -->
+  <div id="highlightOverlay" aria-hidden="true"></div>
+  <button id="showControlsBtn" title="Show Controls">Show Controls</button>
+
   <!-- Remove n’th Field Modal -->
   <div class="overlay" id="nth-remover-modal">
     <div class="dialog">
@@ -235,7 +318,7 @@ line'></textarea>
       <div class="hint">Choose field type and where to insert it. Fields are <b>1-based</b>.</div>
       <div class="row">
         <label><input type="radio" name="newFieldType" value="number" checked> Number (0)</label>
-        <label><input type="radio" name="newFieldType" value="string"> String ('' )</label>
+        <label><input type="radio" name="newFieldType" value="string"> String ('')</label>
       </div>
       <div class="row">
         <label>Insert after field #
@@ -356,6 +439,9 @@ line'></textarea>
           <li><kbd>Ctrl</kbd>+<kbd>G</kbd> – insert a unique random token at the caret</li>
           <li><kbd>Ctrl</kbd>+<kbd>D</kbd> – duplicate current line (down). If enabled in <em>Settings</em>, clears the <em>last field</em> on the duplicate</li>
           <li><kbd>Ctrl</kbd>+<kbd>R</kbd> – remove current line, crimping content upward</li>
+          <li><kbd>Ctrl</kbd>+<kbd>Z</kbd>/<kbd>Ctrl</kbd>+<kbd>Y</kbd> – undo/redo snapshots (10-depth ring)</li>
+		  <li><kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>E</kbd> – Open duplicate token report</li>
+		  <li><kbd>Ctrl</kbd>+<kbd>S</kbd> – toggle interface visibility (safety button also available)</li>
           <li><kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>V</kbd> – import clipboard into Copy Board</li>
           <li><b>Tokenizer</b> – fills only empty last fields (<code>''</code> or <code>' '</code>) with unique tokens; optionally replace <em>all</em> last fields via <em>Settings</em></li>
           <li><b>Remove n’th Field</b> – removes a 1-based field index from every tuple</li>
@@ -386,7 +472,8 @@ function loadSettings() {
       tokenizerReplaceAll: false,
       tokenStyle: 'alnum',
       tokenLength: 12,
-      theme: 'light'
+      theme: 'light',
+      highlightDuplicates: false
     };
   } catch {
     return {
@@ -394,7 +481,8 @@ function loadSettings() {
       tokenizerReplaceAll: false,
       tokenStyle: 'alnum',
       tokenLength: 12,
-      theme: 'light'
+      theme: 'light',
+      highlightDuplicates: false
     };
   }
 }
@@ -722,6 +810,9 @@ function countCommasBeforeIndexRobust(line, tupleOpen, indexInLine) {
   return commas;
 }
 
+/* ============================
+   Keyboard: Collect / Import / Dump / Duplicate / Remove / Token / Undo-Redo / Toggle UI
+============================ */
 document.addEventListener('keydown', function (event) {
   // Collect: Ctrl+B
   if (event.ctrlKey && event.key.toLowerCase() === 'b' && document.activeElement === textArea) {
@@ -738,7 +829,9 @@ document.addEventListener('keydown', function (event) {
     const after  = textArea.value.substring(end);
     textArea.value = before + after;
     textArea.setSelectionRange(start, start);
+    pushSnapshot(); // record change
     updateRowsCountPill();
+    scheduleHighlightRefresh();
     return;
   }
 
@@ -799,8 +892,10 @@ document.addEventListener('keydown', function (event) {
 
     textArea.value = lines.join('\n');
     textArea.setSelectionRange(caretPos, caretPos);
+    pushSnapshot();
     updateBoardView();
     updateRowsCountPill();
+    scheduleHighlightRefresh();
     return;
   }
 
@@ -823,7 +918,9 @@ document.addEventListener('keydown', function (event) {
     for (let i = 0; i <= lineIndex; i++) startOfNew += lines[i].length + 1;
     const newCaret = startOfNew + Math.min(column, lines[lineIndex + 1].length);
     textArea.setSelectionRange(newCaret, newCaret);
+    pushSnapshot();
     updateRowsCountPill();
+    scheduleHighlightRefresh();
     return;
   }
 
@@ -842,7 +939,9 @@ document.addEventListener('keydown', function (event) {
 
     textArea.value = lines.join('\n');
     textArea.setSelectionRange(acc, acc);
+    pushSnapshot();
     updateRowsCountPill();
+    scheduleHighlightRefresh();
     return;
   }
 
@@ -850,8 +949,39 @@ document.addEventListener('keydown', function (event) {
   if (event.ctrlKey && event.key.toLowerCase() === 'g' && document.activeElement === textArea) {
     event.preventDefault();
     insertUniqueTokenAtCaret();
+    pushSnapshot();
+    scheduleHighlightRefresh();
     return;
   }
+
+  // Undo: Ctrl+Z (custom ring buffer)
+  if (event.ctrlKey && !event.shiftKey && event.key.toLowerCase() === 'z' && document.activeElement === textArea) {
+    event.preventDefault();
+    undoSnapshot();
+    return;
+  }
+  // Redo: Ctrl+Y (custom ring buffer)
+  if (event.ctrlKey && event.key.toLowerCase() === 'y' && document.activeElement === textArea) {
+    event.preventDefault();
+    redoSnapshot();
+    return;
+  }
+
+  // Toggle interface: Ctrl+S
+  if (event.ctrlKey && event.key.toLowerCase() === 's') {
+    event.preventDefault();
+    toggleInterfaceHidden();
+    return;
+  }
+  
+  // Show Duplicate End Tokens: Ctrl+Shift+E
+if (event.ctrlKey && event.shiftKey && event.key.toLowerCase() === 'e' && document.activeElement === textArea) {
+  event.preventDefault();
+  openDupesModal();
+  return;
+}
+
+
 });
 
 /* ============================
@@ -945,7 +1075,9 @@ document.getElementById('tokenizeBtn').addEventListener('click', () => {
     lines[li] = newLine;
   }
   textArea.value = lines.join('\n');
+  pushSnapshot();
   updateRowsCountPill();
+  scheduleHighlightRefresh();
 });
 
 /* ============================
@@ -993,7 +1125,9 @@ nthApplyBtn.addEventListener('click', () => {
   if (!Number.isInteger(idx1) || idx1 < 1) { alert('Enter an integer ≥ 1.'); return; }
   removeFieldAcrossDocument(idx1 - 1);
   nthModal.style.display = 'none';
+  pushSnapshot();
   updateRowsCountPill();
+  scheduleHighlightRefresh();
 });
 nthInput.addEventListener('keydown', (e) => {
   if (e.key === 'Enter') nthApplyBtn.click();
@@ -1047,7 +1181,9 @@ addFieldApplyBtn.addEventListener('click', () => {
   if (!Number.isInteger(afterN) || afterN < 0) { alert('Insert-after must be an integer ≥ 0.'); return; }
   addFieldAcrossDocument(afterN, type);
   addFieldModal.style.display = 'none';
+  pushSnapshot();
   updateRowsCountPill();
+  scheduleHighlightRefresh();
 });
 
 /* ============================
@@ -1348,7 +1484,9 @@ applyInterfieldBtn.addEventListener('click', () => {
     rounding: rnd,
     flipOrder: flip
   }, range);
+  pushSnapshot();
   updateRowsCountPill();
+  scheduleHighlightRefresh();
 });
 
 applyFieldBtn.addEventListener('click', () => {
@@ -1370,7 +1508,9 @@ applyFieldBtn.addEventListener('click', () => {
     rounding: rnd,
     flipOrder: flip
   }, range);
+  pushSnapshot();
   updateRowsCountPill();
+  scheduleHighlightRefresh();
 });
 
 applyFieldFieldBtn.addEventListener('click', () => {
@@ -1394,11 +1534,13 @@ applyFieldFieldBtn.addEventListener('click', () => {
     op,
     rounding: rnd
   }, range);
+  pushSnapshot();
   updateRowsCountPill();
+  scheduleHighlightRefresh();
 });
 
 /* ============================
-   Settings modal wiring
+   Settings modal wiring (added highlightDuplicates)
 ============================ */
 const settingsModal = document.getElementById('settings-modal');
 const settingsBtn   = document.getElementById('settingsBtn');
@@ -1427,6 +1569,7 @@ function closeSettings() {
   saveSettings(SETTINGS);
   applyTheme(SETTINGS.theme);
   settingsModal.style.display = 'none';
+  scheduleHighlightRefresh();
 }
 settingsBtn.addEventListener('click', openSettings);
 settingsClose.addEventListener('click', closeSettings);
@@ -1476,12 +1619,148 @@ aboutClose.addEventListener('click', () => { aboutModal.style.display = 'none'; 
 aboutModal.addEventListener('click', (e) => { if (e.target === aboutModal) aboutClose.click(); });
 
 /* ============================
-   Live updates for rows pill
+   Live updates for rows pill + snapshots + highlighter
 ============================ */
-textArea.addEventListener('input', updateRowsCountPill);
+textArea.addEventListener('input', () => { updateRowsCountPill(); pushSnapshot(); scheduleHighlightRefresh(); });
 textArea.addEventListener('keyup', updateRowsCountPill);
 textArea.addEventListener('mouseup', updateRowsCountPill);
 textArea.addEventListener('select', updateRowsCountPill);
+
+/* ============================
+   Snapshot ring buffer (10)
+============================ */
+const SNAP_MAX = 10;
+let snapStack = []; // [{value, selStart, selEnd}]
+let snapIndex = -1; // points to current snapshot
+
+function pushSnapshot() {
+  const val = textArea.value;
+  const selStart = textArea.selectionStart || 0;
+  const selEnd = textArea.selectionEnd || selStart;
+
+  // Avoid pushing identical consecutive snapshots
+  if (snapIndex >= 0 && snapStack[snapIndex] && snapStack[snapIndex].value === val) return;
+
+  // If we've undone and then type, discard forward history
+  if (snapIndex < snapStack.length - 1) {
+    snapStack = snapStack.slice(0, snapIndex + 1);
+  }
+
+  snapStack.push({ value: val, selStart, selEnd });
+  // Keep only last SNAP_MAX
+  if (snapStack.length > SNAP_MAX) {
+    snapStack.shift();
+  }
+  snapIndex = snapStack.length - 1;
+}
+
+function applySnapshotAt(idx) {
+  if (idx < 0 || idx >= snapStack.length) return;
+  const s = snapStack[idx];
+  textArea.value = s.value;
+  const start = Math.min(s.selStart, textArea.value.length);
+  const end   = Math.min(s.selEnd,   textArea.value.length);
+  textArea.setSelectionRange(start, end);
+  updateRowsCountPill();
+  scheduleHighlightRefresh();
+}
+
+function undoSnapshot() {
+  if (snapIndex <= 0) return;
+  snapIndex--;
+  applySnapshotAt(snapIndex);
+}
+function redoSnapshot() {
+  if (snapIndex >= snapStack.length - 1) return;
+  snapIndex++;
+  applySnapshotAt(snapIndex);
+}
+// Seed the initial snapshot
+setTimeout(pushSnapshot, 0);
+
+/* ============================
+   Interface hide/show (Ctrl+S + button)
+============================ */
+function toggleInterfaceHidden() {
+  const hidden = document.body.classList.toggle('interface-hidden');
+  
+}
+document.getElementById('showControlsBtn').addEventListener('click', () => {
+  document.body.classList.remove('interface-hidden');
+
+});
+
+/* ============================
+   Duplicate end-token highlighter (overlay)
+============================ */
+const overlayEl = document.getElementById('highlightOverlay');
+
+// find the range of the last field inside a tuple raw string "( ... )"
+// returns {start, end} indices relative to tupleRaw
+function getLastFieldRange(tupleRaw) {
+  const inner = tupleRaw.slice(1, -1);
+  let inQ = false;
+  let startIdx = 0;
+  let lastStart = 0;
+
+  for (let i = 0; i < inner.length; i++) {
+    const ch = inner[i];
+    if (ch === "'") {
+      if (inQ) {
+        if (inner[i - 1] === '\\') {
+          // keep inQ
+        } else if (inner[i + 1] === "'") {
+          i++; // skip escaped quote
+        } else {
+          inQ = false;
+        }
+      } else {
+        inQ = true;
+      }
+    } else if (ch === '\\' && inQ) {
+      i++;
+    } else if (!inQ && ch === ',') {
+      // field boundary: next field starts at i+1 (skip space later)
+      lastStart = i + 1;
+    }
+  }
+  // Trim whitespace around last field
+  // lastStart currently points to char after last comma or 0 if single field
+  // Calculate actual indices in tupleRaw including parentheses
+  const innerSlice = inner.slice(lastStart);
+  const leadingSpaces = innerSlice.match(/^\s*/)[0].length;
+  let start = 1 + lastStart + leadingSpaces; // 1 for '('
+  // end is before ')', but trim trailing spaces
+  let end = tupleRaw.length - 1; // index of ')'
+  // move left over spaces
+  let e = end - 1;
+  while (e >= 0 && /\s/.test(tupleRaw[e])) e--;
+  end = e + 1;
+  return { start, end };
+}
+
+// Extract normalized end-token value from a tuple raw
+function getLastFieldValue(tupleRaw) {
+  const { start, end } = getLastFieldRange(tupleRaw);
+  const raw = tupleRaw.slice(start, end).trim();
+  if (raw.startsWith("'") && raw.endsWith("'")) {
+    const inner = raw.slice(1, -1).replace(/''/g, "'");
+    return inner.trim();
+  }
+  return raw;
+}
+
+// Escape HTML for overlay content
+function escapeHtml(s) {
+  return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+}
+
+// Debounce overlay refresh to avoid excessive work during rapid typing
+let highlightTimer = null;
+function scheduleHighlightRefresh() {
+  if (highlightTimer) cancelAnimationFrame(highlightTimer);
+  highlightTimer = requestAnimationFrame(refreshHighlightOverlay);
+}
 
 /* ============================
    Init
@@ -1489,6 +1768,147 @@ textArea.addEventListener('select', updateRowsCountPill);
 updateBoardView();
 setParseModeLabel('Auto');
 updateRowsCountPill();
+scheduleHighlightRefresh();
 </script>
+<script>
+// ===== Duplicate End Tokens: lazy init, scan, render, open/close =====
+let dupesModal, dupesList, dupesCountEl, dupesCloseBtn, dupesCopyAllBtn, dupesSearch;
+let dupesWired = false;
+
+function ensureDupesRefs() {
+  if (dupesWired) return true;
+
+  dupesModal = document.getElementById('dupes-modal');
+  if (!dupesModal) return false; // modal not in DOM yet
+
+  dupesList        = document.getElementById('dupesList');
+  dupesCountEl     = document.getElementById('dupesCount');
+  dupesCloseBtn    = document.getElementById('dupesCloseBtn');
+  dupesCopyAllBtn  = document.getElementById('dupesCopyAllBtn');
+  dupesSearch      = document.getElementById('dupesSearch');
+
+  // Wire modal actions once
+  dupesCloseBtn.addEventListener('click', closeDupesModal);
+  dupesModal.addEventListener('click', (e) => { if (e.target === dupesModal) closeDupesModal(); });
+  dupesSearch.addEventListener('input', () => renderDupesList(dupesSearch.value));
+
+  // Copy single token (exact token string, without surrounding quotes)
+  dupesList.addEventListener('click', (e) => {
+    const btn = e.target.closest('button.dupeBtn[data-copy]');
+    if (!btn) return;
+    const tok = btn.getAttribute('data-copy') || '';
+    navigator.clipboard.writeText(tok).catch(()=>{});
+  });
+
+  // Copy all tokens (one per line)
+  dupesCopyAllBtn.addEventListener('click', () => {
+    const dupes = collectDuplicateEndTokens().map(([t]) => t).join('\n');
+    if (!dupes) return;
+    navigator.clipboard.writeText(dupes).catch(()=>{});
+  });
+
+  // Auto-refresh while open
+  textArea.addEventListener('input', () => {
+    if (dupesModal.style.display === 'flex') renderDupesList(dupesSearch.value);
+  });
+
+  dupesWired = true;
+  return true;
+}
+
+function collectDuplicateEndTokens() {
+  const counts = new Map();
+  const lines = (textArea?.value || '').split(/\r?\n/);
+
+  for (const line of lines) {
+    if (!line.trim()) continue;
+    const tuples = findAllTuplesInLineSmart(line);
+    for (const t of tuples) {
+      const val = getLastFieldValue(t.raw);
+      if (val === '') continue; // skip empty ''
+      counts.set(val, (counts.get(val) || 0) + 1);
+    }
+  }
+
+  const dupes = [];
+  counts.forEach((c, k) => { if (c >= 2) dupes.push([k, c]); });
+  dupes.sort((a,b) => b[1] - a[1] || a[0].localeCompare(b[0]));
+  return dupes;
+}
+
+function renderDupesList(filterText = '') {
+  const dupes = collectDuplicateEndTokens();
+  const filtered = filterText
+    ? dupes.filter(([tok]) => tok.toLowerCase().includes(filterText.toLowerCase()))
+    : dupes;
+
+  dupesList.innerHTML = '';
+  if (filtered.length === 0) {
+    dupesList.innerHTML = `<div class="dupeItem"><span class="hint">No duplicate end tokens found.</span></div>`;
+  } else {
+    for (const [token, count] of filtered) {
+      const row = document.createElement('div');
+      row.className = 'dupeItem';
+      row.setAttribute('role','listitem');
+      row.innerHTML = `
+        <span class="dupeToken">'${token.replace(/&/g,'&amp;').replace(/</g,'&lt;')}'</span>
+        <div class="dupeActions">
+          <span class="dupeBadge" title="Occurrences">${count}×</span>
+          <button class="dupeBtn" data-copy="${token.replace(/"/g, '&quot;')}">Copy</button>
+        </div>
+      `;
+      dupesList.appendChild(row);
+    }
+  }
+
+  const totalDistinct = dupes.length;
+  const totalOcc = dupes.reduce((s, [,c]) => s + c, 0);
+  dupesCountEl.textContent = totalDistinct
+    ? `Duplicates: ${totalDistinct} distinct • ${totalOcc} total occurrences`
+    : 'No duplicates detected';
+}
+
+function openDupesModal() {
+  if (!ensureDupesRefs()) {
+    // Modal HTML not in DOM yet — this means the block is below this script.
+    // Try again on next frame once parsing advances.
+    requestAnimationFrame(() => {
+      if (!ensureDupesRefs()) return console.warn('Duplicate tokens modal not found in DOM.');
+      renderDupesList('');
+      dupesModal.style.display = 'flex';
+      setTimeout(() => dupesSearch.focus(), 0);
+    });
+    return;
+  }
+  renderDupesList('');
+  dupesModal.style.display = 'flex';
+  setTimeout(() => dupesSearch.focus(), 0);
+}
+function closeDupesModal() {
+  if (dupesModal) dupesModal.style.display = 'none';
+}
+</script>
+
+<!-- Duplicate End Tokens Modal -->
+<div class="overlay" id="dupes-modal" aria-hidden="true">
+  <div class="dialog" role="dialog" aria-modal="true" aria-labelledby="dupesTitle">
+    <div class="title" id="dupesTitle">Duplicate End Field Tokens</div>
+    <div class="hint">Shows each end-field token that appears in <b>2+</b> tuples. List is de-duplicated.</div>
+
+    <div id="dupesListWrap">
+      <div id="dupesHeader" style="padding:8px 10px;">
+        <span id="dupesCount">Scanning…</span>
+        <input id="dupesSearch" type="text" placeholder="Filter tokens…">
+      </div>
+      <div id="dupesList" role="list"></div>
+    </div>
+
+    <div class="btns" style="margin-top:12px;">
+      <button id="dupesCopyAllBtn" class="dupeBtn">Copy All</button>
+      <button id="dupesCloseBtn" class="primary">Close</button>
+    </div>
+  </div>
+</div>
+
 </body>
 </html>
