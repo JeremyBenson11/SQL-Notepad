@@ -1762,6 +1762,31 @@ function scheduleHighlightRefresh() {
   highlightTimer = requestAnimationFrame(refreshHighlightOverlay);
 }
 
+// === Copy Board buttons ===
+const clearBtn  = document.getElementById('clearBtn');
+const importBtn = document.getElementById('importBtn');
+
+if (clearBtn) {
+  clearBtn.addEventListener('click', () => {
+    collectedItems.length = 0;      // clear queue
+    updateBoardView();              // refresh textarea + pill
+  });
+}
+
+if (importBtn) {
+  importBtn.addEventListener('click', async () => {
+    try {
+      const txt = await navigator.clipboard.readText();
+      pushItemsAuto(txt);           // tokenize + append to queue
+    } catch (err) {
+      // Fallback if clipboard API not available/blocked
+      const txt = prompt('Paste clipboard contents here:','');
+      if (txt != null) pushItemsAuto(txt);
+    }
+  });
+}
+
+
 /* ============================
    Init
 ============================ */
