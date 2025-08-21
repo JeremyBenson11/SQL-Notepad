@@ -3,6 +3,7 @@ Aug 21st, 2025
 * Ctrl+Z and Ctrl+Y manipulate a 10 keystroke undo and redo system.
 * Ctrl+S enters a clutter-free type mode.
 * Ctrl+Shift+E opens duplicate token report window.
+* Fixed cluttered text on remove n'th field button.
 
 Aug 20th, 2025
 
