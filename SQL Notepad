@@ -5,7 +5,7 @@
 <title>SQL Notepad</title>
 <meta name="viewport" content="width=device-width,initial-scale=1" />
 <style>
-  :root {
+ :root {
   --bg:#0f172a;
   --bg2:#0b1327;
   --panel:#0d1326;
@@ -35,21 +35,21 @@ html, body { height: 100%; }
 body {
   font-family: Arial, sans-serif;
   display: grid;
-  grid-template-rows: auto auto 1fr;
+  /* 4 rows: header, menubar, toolbar (.bar), content (.wrap) */
+  grid-template-rows: auto auto auto 1fr;
   background: var(--bg);
   color: var(--fg);
-  min-height: 100vh; /* ensure full viewport height */
+  min-height: 100vh;
 }
 
-/* When interface is hidden, drop the bar row */
-body.interface-hidden { grid-template-rows: auto 1fr; }
+/* When interface is hidden, drop the bar row (header + menubar + content) */
+body.interface-hidden { grid-template-rows: auto auto 1fr; }
 
 header {
   padding: 16px 20px;
   background: var(--bg);
   border-bottom: 1px solid var(--border);
 }
-/* Slim header when interface hidden */
 body.interface-hidden header { padding: 6px 12px; }
 header h1 { margin: 0 0 6px; font-size: 20px; }
 header p { margin: 0; font-size: 14px; color: var(--muted); min-height: 1.4em; }
@@ -64,13 +64,17 @@ kbd {
   color: var(--fg);
 }
 
+/* ===== Toolbar (.bar) ===== */
 .bar {
-  display:flex; gap:8px; align-items:center; padding:8px 20px;
+  grid-row: 3;                 /* sits on the 3rd (auto) row */
+  display:flex; gap:8px; align-items:center;
+  padding:8px 20px;
   background: var(--bg2); color: var(--fg);
   border-bottom:1px solid var(--border);
+  height:auto;                 /* ensure intrinsic height */
+  line-height:1.2;
   flex-wrap: wrap;
 }
-/* Hide top bar when interface hidden */
 body.interface-hidden .bar { display:none; }
 
 .bar .right {
@@ -95,7 +99,9 @@ body.interface-hidden .bar { display:none; }
 .bar button:hover { background: var(--accent-hover); }
 .bar button.secondary:hover { background: var(--panel); }
 
+/* ===== Main wrap/content ===== */
 .wrap {
+  grid-row: 4;                 /* the filling row */
   display:grid; grid-template-columns: 300px 1fr; gap:0; height: 100%;
   min-height: 0; /* allow child to stretch correctly */
 }
@@ -105,7 +111,6 @@ aside.panel {
   display:flex; flex-direction:column;
 }
 aside.panel.hidden { display:none; }
-/* Hide copy board when interface hidden */
 body.interface-hidden aside.panel { display:none !important; }
 body.interface-hidden .wrap { grid-template-columns: 1fr !important; }
 
@@ -126,10 +131,9 @@ textarea#textArea {
   background: var(--editor); color: var(--fg);
   font-family: ui-monospace, Menlo, Consolas, monospace;
 }
-/* Add a slight left margin when interface hidden */
 body.interface-hidden textarea#textArea { margin-left: 12px; }
 
-/* Modal shared styles */
+/* ===== Modal shared styles ===== */
 .overlay {
   position: fixed; inset: 0; background: rgba(0,0,0,0.5);
   display: none; align-items: center; justify-content: center; z-index: 9999;
@@ -180,7 +184,7 @@ body.interface-hidden textarea#textArea { margin-left: 12px; }
 #showControlsBtn {
   position: fixed;
   top: 8px;
-  right: 8px;            /* moved to far right */
+  right: 8px;
   z-index: 10000;
   display: none;
   background: var(--accent);
@@ -221,10 +225,76 @@ body.interface-hidden textarea#textArea { margin-left: 12px; }
 }
 .dupeBtn:hover { background: var(--panel); }
 
+/* ===== Scoped Menubar (kept from your version) ===== */
+.menubar{
+  background: var(--bg2);
+  border-bottom: 1px solid var(--border);
+  padding: 0 8px;
+  position: sticky; top: 0;
+  z-index: 150;
+}
+.appmenu-root{ list-style:none; margin:0; padding:0; display:flex; gap:6px; }
+.appmenu-item{ position:relative; }
+.appmenu-trigger{
+  background:transparent; color:var(--fg);
+  border:1px solid transparent;
+  padding:6px 8px; border-radius:6px; cursor:pointer; font-size:13px;
+}
+.appmenu-trigger:hover, .appmenu-trigger:focus{
+  background:var(--panel);
+  border-color: var(--border);
+  outline:none;
+}
 
-/* */
+.appmenu{
+  position:absolute; top:100%; left:0; min-width:190px;
+  background:var(--panel); border:1px solid var(--border);
+  border-radius:8px; padding:4px; margin-top:4px; display:none;
+  box-shadow: 0 6px 16px rgba(0,0,0,.25);
+  z-index: 160;
+}
+.appmenu.show{ display:block; }
 
+.appmenu li{ list-style:none; }
+.appmenu button[role="menuitem"]{
+  display:block; width:100%; text-align:left;
+  background:transparent; color:var(--fg); border:none;
+  padding:6px 8px; border-radius:6px; cursor:pointer; font-size:13px;
+}
+.appmenu button[role="menuitem"]:hover{ background:var(--bg2); }
+
+.appmenu-sep{ height:1px; background:var(--border); margin:4px; border-radius:1px; }
+
+/* Nested submenu */
+.appmenu-nested{ position:relative; }
+.appmenu-trigger.nested{
+  display:flex; justify-content:space-between; align-items:center; width:100%;
+}
+.appmenu-field{
+  position:absolute;
+  left:100%; top:0; margin-left:4px; min-width:190px;
+  z-index: 170;
+}
+
+/* Mobile: stack */
+@media (max-width:600px){
+  .appmenu, .appmenu-field{
+    position:fixed; left:12px; right:12px; top:auto; bottom:12px;
+    margin:0; max-height:50vh; overflow:auto;
+  }
+}
+
+.scopeInput{
+  min-width:120px; max-width:220px;
+  padding:8px 10px; border-radius:8px; border:1px solid var(--border);
+  background: var(--editor); color: var(--fg); outline: none;
+}
+.scopeInput:empty:before{ content: attr(data-ph); color: var(--muted); }
+
+
+/* Show the safety button when hidden */
 body.interface-hidden #showControlsBtn { display: inline-block; }
+
 
 </style>
 </head>
@@ -233,7 +303,57 @@ body.interface-hidden #showControlsBtn { display: inline-block; }
     <h1>SQL Notepad</h1>
     <p>&nbsp;</p>
   </header>
+  <!-- === Top Software Menu (scoped) === -->
+<nav class="menubar" aria-label="App menu">
+  <ul class="appmenu-root">
+    <li class="appmenu-item">
+      <button class="appmenu-trigger" data-menu="file">File</button>
+      <ul class="appmenu appmenu-file" role="menu">
+        <li><button id="mnuNewDoc"      role="menuitem">New</button></li>
+        <li><button id="mnuImportBoard" role="menuitem">Import to Copy Board</button></li>
+        <li><button id="mnuClearBoard"  role="menuitem">Clear Copy Board</button></li>
+        <li class="appmenu-sep" aria-hidden="true"></li>
+        <li><button id="mnuToggleBoard" role="menuitem">Hide/Show Copy Board</button></li>
+        <li><button id="mnuToggleUI"    role="menuitem">Toggle Interface (Ctrl+S)</button></li>
+      </ul>
+    </li>
 
+    <li class="appmenu-item">
+      <button class="appmenu-trigger" data-menu="tools">Tools</button>
+      <ul class="appmenu appmenu-tools" role="menu">
+        <li><button id="mnuTokenizer" role="menuitem">Tokenizer</button></li>
+        <li><button id="mnuMath"      role="menuitem">Math</button></li>
+
+        <!-- Nested submenu: Field ▸ -->
+        <li class="appmenu-nested">
+          <button class="appmenu-trigger nested" data-menu="field">Field ▸</button>
+          <ul class="appmenu appmenu-field" role="menu">
+            <li><button id="mnuFieldAdd"    role="menuitem">Add Field</button></li>
+            <li><button id="mnuFieldRemove" role="menuitem">Remove Field</button></li>
+            <li><button id="mnuFieldSet"    role="menuitem">Set Field</button></li>
+          </ul>
+        </li>
+
+        <li class="appmenu-sep" aria-hidden="true"></li>
+        <li><button id="mnuListExtractor" role="menuitem">List Extractor (coming soon)</button></li>
+      </ul>
+    </li>
+
+    <li class="appmenu-item">
+      <button class="appmenu-trigger" data-menu="help">Help</button>
+      <ul class="appmenu appmenu-help" role="menu">
+        <li><button id="mnuHelp" role="menuitem">Help</button></li>
+      </ul>
+    </li>
+
+    <li class="appmenu-item">
+      <button class="appmenu-trigger" data-menu="about">About</button>
+      <ul class="appmenu appmenu-about" role="menu">
+        <li><button id="mnuAbout" role="menuitem">About</button></li>
+      </ul>
+    </li>
+  </ul>
+</nav>
   <div class="bar">
     <span class="pill" id="countPill">Copy Board: 0 items</span>
     <span class="pill" id="rowsCountPill">Set: 0 rows</span>
@@ -365,11 +485,102 @@ line'></textarea>
 
       <div class="title" style="font-size:14px; margin:0;">Apply to</div>
       <div class="row">
-        <label><input type="checkbox" id="mathScopeSet" checked> Current set (caret/selection)</label>
+        <label><input type="checkbox" id="mathScopeSet" checked> Current set</label>
         <label><input type="checkbox" id="mathScopeDoc"> Whole document</label>
       </div>
     </div>
   </div>
+  
+  <!-- Set Field Modal -->
+<div class="overlay" id="set-field-modal">
+  <div class="dialog">
+    <div class="title">Set Field</div>
+    <div class="hint">Fields are <b>1-based</b>. Apply to the current set (around the caret) or the whole document.</div>
+
+    <!-- Apply scope -->
+    <!-- Set Field scope -->
+	<div class="divider"></div>
+	<div class="title" style="font-size:14px; margin:0;">Apply to</div>
+	<div class="row">
+	  <div id="setScopeInput" class="scopeInput" contenteditable="true" data-ph="doc or 1, 2, 3…">doc</div>
+	  <small class="hint" style="margin-top:11px;">Type <b>doc</b> for whole document, or a number of set (sets = rows separated by blank lines).</small>
+	</div>
+    <div class="divider"></div>
+    <!-- Op A: target = X when Y = value -->
+    <div class="title" style="font-size:14px;margin-bottom:6px;">Target field = value when other field equals</div>
+    <div class="row">
+      <label>Target field
+        <input type="number" id="sf_target_when" min="1" value="1" style="width:90px;">
+      </label>
+      <label>Value type
+        <select id="sf_val_when_type">
+          <option value="string">String</option>
+          <option value="number">Number</option>
+        </select>
+      </label>
+      <label>Value
+        <input type="text" id="sf_val_when" placeholder="'' or 0">
+      </label>
+      <label>When field
+        <input type="number" id="sf_cond_field" min="1" value="1" style="width:90px;">
+      </label>
+      <label>Equals type
+        <select id="sf_cond_type">
+          <option value="string">String</option>
+          <option value="number">Number</option>
+        </select>
+      </label>
+      <label>Equals
+        <input type="text" id="sf_cond_value" placeholder="match value">
+      </label>
+    </div>
+    <div class="btns">
+      <button id="sf_apply_when" class="primary">Apply</button>
+    </div>
+
+    <div class="divider"></div>
+
+    <!-- Op B: target = X (unconditional) -->
+    <div class="title" style="font-size:14px;margin-bottom:6px;">Target field = value (unconditional)</div>
+    <div class="row">
+      <label>Target field
+        <input type="number" id="sf_target_all" min="1" value="1" style="width:90px;">
+      </label>
+      <label>Value type
+        <select id="sf_val_all_type">
+          <option value="string">String</option>
+          <option value="number">Number</option>
+        </select>
+      </label>
+      <label>Value
+        <input type="text" id="sf_val_all" placeholder="'' or 0">
+      </label>
+    </div>
+    <div class="btns">
+      <button id="sf_apply_all" class="primary">Apply</button>
+    </div>
+
+    <div class="divider"></div>
+
+    <!-- Op C: fields X..Y replaced with a string -->
+    <div class="title" style="font-size:14px;margin-bottom:6px;">Fields X to Y replaced with string</div>
+    <div class="row">
+      <label>From field
+        <input type="number" id="sf_span_start" min="1" value="1" style="width:90px;">
+      </label>
+      <label>To field
+        <input type="number" id="sf_span_end" min="1" value="2" style="width:90px;">
+      </label>
+      <label>Replacement string
+        <input type="text" id="sf_span_text" placeholder="new value">
+      </label>
+    </div>
+    <div class="btns">
+      <button id="sf_apply_span" class="primary">Apply</button>
+      <button id="sf_close">Close</button>
+    </div>
+  </div>
+</div>
 
   <!-- Settings Modal -->
   <div class="overlay" id="settings-modal">
@@ -831,7 +1042,7 @@ document.addEventListener('keydown', function (event) {
     textArea.setSelectionRange(start, start);
     pushSnapshot(); // record change
     updateRowsCountPill();
-    scheduleHighlightRefresh();
+
     return;
   }
 
@@ -895,7 +1106,7 @@ document.addEventListener('keydown', function (event) {
     pushSnapshot();
     updateBoardView();
     updateRowsCountPill();
-    scheduleHighlightRefresh();
+  
     return;
   }
 
@@ -920,7 +1131,7 @@ document.addEventListener('keydown', function (event) {
     textArea.setSelectionRange(newCaret, newCaret);
     pushSnapshot();
     updateRowsCountPill();
-    scheduleHighlightRefresh();
+ 
     return;
   }
 
@@ -941,7 +1152,7 @@ document.addEventListener('keydown', function (event) {
     textArea.setSelectionRange(acc, acc);
     pushSnapshot();
     updateRowsCountPill();
-    scheduleHighlightRefresh();
+
     return;
   }
 
@@ -950,7 +1161,7 @@ document.addEventListener('keydown', function (event) {
     event.preventDefault();
     insertUniqueTokenAtCaret();
     pushSnapshot();
-    scheduleHighlightRefresh();
+
     return;
   }
 
@@ -1077,7 +1288,7 @@ document.getElementById('tokenizeBtn').addEventListener('click', () => {
   textArea.value = lines.join('\n');
   pushSnapshot();
   updateRowsCountPill();
-  scheduleHighlightRefresh();
+  
 });
 
 /* ============================
@@ -1127,7 +1338,7 @@ nthApplyBtn.addEventListener('click', () => {
   nthModal.style.display = 'none';
   pushSnapshot();
   updateRowsCountPill();
-  scheduleHighlightRefresh();
+ 
 });
 nthInput.addEventListener('keydown', (e) => {
   if (e.key === 'Enter') nthApplyBtn.click();
@@ -1183,7 +1394,7 @@ addFieldApplyBtn.addEventListener('click', () => {
   addFieldModal.style.display = 'none';
   pushSnapshot();
   updateRowsCountPill();
-  scheduleHighlightRefresh();
+
 });
 
 /* ============================
@@ -1292,13 +1503,6 @@ function computeSetBoundsFromSelection(lines) {
   const startLine = Math.min(infoStart.lineIndex, infoEnd.lineIndex);
   const endLine   = Math.max(infoStart.lineIndex, infoEnd.lineIndex);
   return expandToSetBounds(lines, startLine, endLine);
-}
-
-function getScopeBounds() {
-  const lines = textArea.value.split(/\r?\n/);
-  if (scopeDocChk.checked) return { lines, start: 0, end: lines.length };
-  const bounds = computeSetBoundsFromSelection(lines);
-  return { lines, start: bounds.start, end: bounds.end };
 }
 
 function applyMathAcrossRange(opts, range) {
@@ -1486,7 +1690,7 @@ applyInterfieldBtn.addEventListener('click', () => {
   }, range);
   pushSnapshot();
   updateRowsCountPill();
-  scheduleHighlightRefresh();
+  
 });
 
 applyFieldBtn.addEventListener('click', () => {
@@ -1510,7 +1714,7 @@ applyFieldBtn.addEventListener('click', () => {
   }, range);
   pushSnapshot();
   updateRowsCountPill();
-  scheduleHighlightRefresh();
+
 });
 
 applyFieldFieldBtn.addEventListener('click', () => {
@@ -1536,7 +1740,7 @@ applyFieldFieldBtn.addEventListener('click', () => {
   }, range);
   pushSnapshot();
   updateRowsCountPill();
-  scheduleHighlightRefresh();
+
 });
 
 /* ============================
@@ -1569,7 +1773,7 @@ function closeSettings() {
   saveSettings(SETTINGS);
   applyTheme(SETTINGS.theme);
   settingsModal.style.display = 'none';
-  scheduleHighlightRefresh();
+
 }
 settingsBtn.addEventListener('click', openSettings);
 settingsClose.addEventListener('click', closeSettings);
@@ -1621,7 +1825,7 @@ aboutModal.addEventListener('click', (e) => { if (e.target === aboutModal) about
 /* ============================
    Live updates for rows pill + snapshots + highlighter
 ============================ */
-textArea.addEventListener('input', () => { updateRowsCountPill(); pushSnapshot(); scheduleHighlightRefresh(); });
+textArea.addEventListener('input', () => { updateRowsCountPill(); pushSnapshot(); });
 textArea.addEventListener('keyup', updateRowsCountPill);
 textArea.addEventListener('mouseup', updateRowsCountPill);
 textArea.addEventListener('select', updateRowsCountPill);
@@ -1662,7 +1866,7 @@ function applySnapshotAt(idx) {
   const end   = Math.min(s.selEnd,   textArea.value.length);
   textArea.setSelectionRange(start, end);
   updateRowsCountPill();
-  scheduleHighlightRefresh();
+ 
 }
 
 function undoSnapshot() {
@@ -1757,10 +1961,6 @@ function escapeHtml(s) {
 
 // Debounce overlay refresh to avoid excessive work during rapid typing
 let highlightTimer = null;
-function scheduleHighlightRefresh() {
-  if (highlightTimer) cancelAnimationFrame(highlightTimer);
-  highlightTimer = requestAnimationFrame(refreshHighlightOverlay);
-}
 
 // === Copy Board buttons ===
 const clearBtn  = document.getElementById('clearBtn');
@@ -1793,8 +1993,246 @@ if (importBtn) {
 updateBoardView();
 setParseModeLabel('Auto');
 updateRowsCountPill();
-scheduleHighlightRefresh();
+
 </script>
+<script>
+// ...place this after the scopeSetChk/scopeDocChk are created...
+function getScopeBounds(){
+  const lines = textArea.value.split(/\r?\n/);
+  // Use the actual checkbox ids you created for the Math modal:
+  if (scopeDocChk && scopeDocChk.checked) {
+    return { lines, start: 0, end: lines.length };
+  }
+  // default: current set (block) around the caret/selection
+  const bounds = computeSetBoundsFromSelection(lines);
+  return { lines, start: bounds.start, end: bounds.end };
+}
+</script>
+
+<script>
+/* ===== Set Field modal logic ===== */
+
+// Split the document into "sets" (blocks separated by blank lines)
+function enumerateSets(lines){
+  const sets = [];
+  const isBlank = (i) => !lines[i] || lines[i].trim() === '';
+  let i = 0, n = lines.length;
+  while (i < n){
+    while (i < n && isBlank(i)) i++;      // skip leading blanks
+    if (i >= n) break;
+    const start = i;
+    while (i < n && !isBlank(i)) i++;     // consume non-blank block
+    const end = i;                        // [start, end)
+    sets.push({ start, end });
+  }
+  return sets;
+}
+
+// Read "doc" or a 1-based set number from the contenteditable field
+function getSetFieldScopeBounds(){
+  const lines = textArea.value.split(/\r?\n/);
+  const si = document.getElementById('setScopeInput');
+  const raw = (si?.textContent || '').trim().toLowerCase();
+
+  if (raw === 'doc' || raw === 'document' || raw === 'all'){
+    return { lines, start: 0, end: lines.length };
+  }
+
+  if (/^\d+$/.test(raw)){
+    const n = parseInt(raw, 10);
+    const sets = enumerateSets(lines);
+    if (n >= 1 && n <= sets.length){
+      return { lines, start: sets[n - 1].start, end: sets[n - 1].end };
+    }
+    alert(`Set #${n} not found. There ${sets.length===1 ? 'is 1 set' : 'are ' + sets.length + ' sets'}. Using document.`);
+    return { lines, start: 0, end: lines.length };
+  }
+
+  // Fallback: treat as doc
+  return { lines, start: 0, end: lines.length };
+}
+
+const setFieldModal = document.getElementById('set-field-modal');
+
+function openSetFieldModal(){
+
+  setFieldModal.style.display = 'flex';
+  setTimeout(()=> document.getElementById('sf_target_when').focus(), 0);
+}
+function closeSetFieldModal(){ setFieldModal.style.display = 'none'; }
+document.getElementById('sf_close').addEventListener('click', closeSetFieldModal);
+setFieldModal.addEventListener('click', (e)=>{ if (e.target === setFieldModal) closeSetFieldModal(); });
+
+// Helpers: quoting & comparisons
+function quoteIfNeeded(val, type, preserveQuotedTarget){
+  if (type === 'number') return String(Number(val));
+  const escaped = String(val).replace(/'/g, "''");
+  return `'${escaped}'`;
+}
+// Replace fieldValueAsType() with this:
+function fieldValueAsType(raw, type){
+  const t = raw.trim();
+  if (type === 'number'){
+    // allow numbers even if quoted, e.g. '12'
+    let inner = t;
+    if (t.startsWith("'") && t.endsWith("'")){
+      inner = t.slice(1,-1).replace(/''/g,"'");
+    }
+    const n = parseFloat(inner);
+    return isFinite(n) ? n : NaN;
+  } else {
+    if (t.startsWith("'") && t.endsWith("'")){
+      return t.slice(1,-1).replace(/''/g,"'").trim(); // trim strings
+    }
+    return t.trim();
+  }
+}
+
+function applySetFieldTransformAcrossRange(transformTupleFn){
+  const { lines, start, end } = getSetFieldScopeBounds(); // <-- new scope
+  for (let li = start; li < end; li++){
+    let line = lines[li];
+    if (!line.trim()) continue;
+
+    // Work right-to-left so indices stay valid as tuples change length
+    let mutated = line;
+    const tuples = findAllTuplesInLineSmart(mutated);
+    for (let k = tuples.length - 1; k >= 0; k--){
+      // re-scan this line to keep tuple positions accurate
+      const current = findAllTuplesInLineSmart(mutated);
+      const t = current[k];
+      const before = mutated.slice(0, t.open);
+      const after  = mutated.slice(t.close);
+      const replaced = transformTupleFn(t.raw); // returns new "( ... )"
+      mutated = before + replaced + after;
+    }
+    lines[li] = mutated;
+  }
+  textArea.value = lines.join('\n');
+  pushSnapshot();
+  updateRowsCountPill();
+
+}
+
+
+// Core transform helpers
+function setTargetInTuple(tupleRaw, targetIdx0, valueStr, valueType){
+  const parts = splitFieldsRobust(tupleRaw);
+  if (targetIdx0 < 0 || targetIdx0 >= parts.length) return tupleRaw;
+  const targetWasQuoted = parts[targetIdx0].trim().startsWith("'") && parts[targetIdx0].trim().endsWith("'");
+  const replacement = (valueType === 'number' && !targetWasQuoted) ? String(Number(valueStr))
+                      : quoteIfNeeded(valueStr, valueType);
+  parts[targetIdx0] = replacement;
+  return joinFields(parts);
+}
+function setTargetWhenInTuple(tupleRaw, targetIdx0, condIdx0, valueStr, valueType, condVal, condType){
+  const parts = splitFieldsRobust(tupleRaw);
+  if (targetIdx0 < 0 || targetIdx0 >= parts.length) return tupleRaw;
+  if (condIdx0   < 0 || condIdx0   >= parts.length) return tupleRaw;
+
+ // Replace just the middle of setTargetWhenInTuple() where eq is computed:
+	const curCond = fieldValueAsType(parts[condIdx0], condType);
+	const wantVal = (condType === 'number') ? Number(condVal) : String(condVal).trim();
+
+	const eq = (condType === 'number')
+	  ? (isFinite(curCond) && curCond === wantVal)
+	  : (String(curCond).trim() === wantVal);
+
+  if (!eq) return tupleRaw;
+
+  const targetWasQuoted = parts[targetIdx0].trim().startsWith("'") && parts[targetIdx0].trim().endsWith("'");
+  const replacement = (valueType === 'number' && !targetWasQuoted) ? String(Number(valueStr))
+                      : quoteIfNeeded(valueStr, valueType);
+  parts[targetIdx0] = replacement;
+  return joinFields(parts);
+}
+function replaceSpanWithString(tupleRaw, startIdx0, endIdx0, text){
+  const parts = splitFieldsRobust(tupleRaw);
+  if (startIdx0 < 0 || endIdx0 < startIdx0 || startIdx0 >= parts.length) return tupleRaw;
+  const clampedEnd = Math.min(endIdx0, parts.length-1);
+  const replacement = `'${String(text).replace(/'/g,"''")}'`;
+  parts.splice(startIdx0, clampedEnd - startIdx0 + 1, replacement);
+  return joinFields(parts);
+}
+
+// Document-level applicators
+// Replace the body of applyTupleTransformAcrossRange() with this version:
+function applyTupleTransformAcrossRange(transformFn){
+   const { lines, start, end } = getSetFieldScopeBounds();;
+  for (let li = start; li < end; li++){
+    let line = lines[li];
+    if (!line.trim()) continue;
+
+    // re-scan on the current line state, process right-to-left each pass
+    const tuples = findAllTuplesInLineSmart(line);
+    if (!tuples.length) continue;
+
+    let newLine = line;
+    for (let k = tuples.length - 1; k >= 0; k--){
+      const t = findAllTuplesInLineSmart(newLine)[k] || tuples[k]; // refresh indices
+      const before = newLine.slice(0, t.open);
+      const after  = newLine.slice(t.close);
+      const replaced = transformFn(t.raw);
+      newLine = before + replaced + after;
+    }
+    lines[li] = newLine;
+  }
+  textArea.value = lines.join('\n');
+  pushSnapshot();
+  updateRowsCountPill();
+ 
+}
+
+
+/* ---- Wire Apply buttons ---- */
+
+// A) target = value when (cond field == value)
+document.getElementById('sf_apply_when').addEventListener('click', ()=>{
+  const tgt1 = Number(document.getElementById('sf_target_when').value);
+  const vType= String(document.getElementById('sf_val_when_type').value);
+  const vVal = document.getElementById('sf_val_when').value;
+  const cFld = Number(document.getElementById('sf_cond_field').value);
+  const cType= String(document.getElementById('sf_cond_type').value);
+  const cVal = document.getElementById('sf_cond_value').value;
+
+  if (!Number.isInteger(tgt1) || tgt1 < 1) return alert('Target field must be an integer ≥ 1.');
+  if (!Number.isInteger(cFld) || cFld < 1) return alert('When field must be an integer ≥ 1.');
+  if (vType === 'number' && !isFinite(Number(vVal))) return alert('Value must be a valid number.');
+  if (cType === 'number' && !isFinite(Number(cVal))) return alert('Equals must be a valid number.');
+
+  applyTupleTransformAcrossRange(tupleRaw =>
+    setTargetWhenInTuple(tupleRaw, tgt1-1, cFld-1, vVal, vType, cVal, cType)
+  );
+});
+
+// B) target = value (unconditional)
+document.getElementById('sf_apply_all').addEventListener('click', ()=>{
+  const tgt1 = Number(document.getElementById('sf_target_all').value);
+  const vType= String(document.getElementById('sf_val_all_type').value);
+  const vVal = document.getElementById('sf_val_all').value;
+
+  if (!Number.isInteger(tgt1) || tgt1 < 1) return alert('Target field must be an integer ≥ 1.');
+  if (vType === 'number' && !isFinite(Number(vVal))) return alert('Value must be a valid number.');
+
+  applyTupleTransformAcrossRange(tupleRaw =>
+    setTargetInTuple(tupleRaw, tgt1-1, vVal, vType)
+  );
+});
+
+// C) fields X..Y replaced with a string
+document.getElementById('sf_apply_span').addEventListener('click', ()=>{
+  const s = Number(document.getElementById('sf_span_start').value);
+  const e = Number(document.getElementById('sf_span_end').value);
+  const txt = document.getElementById('sf_span_text').value;
+
+  if (!Number.isInteger(s) || s < 1) return alert('From field must be an integer ≥ 1.');
+  if (!Number.isInteger(e) || e < 1) return alert('To field must be an integer ≥ 1.');
+  if (e < s) return alert('To field must be ≥ From field.');
+
+  applyTupleTransformAcrossRange(tupleRaw => replaceSpanWithString(tupleRaw, s-1, e-1, txt));
+});
+</script>
+
 <script>
 // ===== Duplicate End Tokens: lazy init, scan, render, open/close =====
 let dupesModal, dupesList, dupesCountEl, dupesCloseBtn, dupesCopyAllBtn, dupesSearch;
@@ -1913,7 +2351,140 @@ function closeDupesModal() {
   if (dupesModal) dupesModal.style.display = 'none';
 }
 </script>
+<script>
+/* ===== Scoped Software Menu behavior (no impact on .bar) ===== */
+(function(){
+  const menubar = document.querySelector('.menubar');
+  if (!menubar) return;
 
+  const $  = (s, r=document) => r.querySelector(s);
+  const $$ = (s, r=document) => Array.from(r.querySelectorAll(s));
+
+  function closeAll(except){
+    $$('.menubar .appmenu').forEach(m=>{
+      if (except && (m===except || m.contains(except))) return;
+      m.classList.remove('show'); m.removeAttribute('aria-expanded');
+    });
+    $$('.menubar .appmenu-trigger').forEach(b=>{
+      if (except && (b===except || b.contains(except))) return;
+      b.removeAttribute('aria-expanded');
+    });
+  }
+
+  // Top-level toggles
+  $$('.menubar .appmenu-item > .appmenu-trigger').forEach(btn=>{
+    btn.addEventListener('click', (e)=>{
+      const parent = e.currentTarget.closest('.appmenu-item');
+      const key = btn.getAttribute('data-menu');
+      const menu = parent.querySelector(`.appmenu-${key}`);
+      const open = menu.classList.contains('show');
+      if (!open){
+        closeAll();
+        menu.classList.add('show');
+        menu.setAttribute('aria-expanded','true');
+        btn.setAttribute('aria-expanded','true');
+      } else {
+        closeAll();
+      }
+      e.stopPropagation();
+    });
+  });
+
+  // Nested Field submenu (hover + click, sticky-open)
+  const nested = $('.appmenu-nested', menubar);
+  if (nested){
+    const nBtn  = $('.appmenu-trigger.nested', nested);
+    const nMenu = $('.appmenu-field', nested);
+    let timer = null;
+
+    const open  = ()=>{ nMenu.classList.add('show'); nMenu.setAttribute('aria-expanded','true'); nBtn.setAttribute('aria-expanded','true'); };
+    const close = ()=>{ nMenu.classList.remove('show'); nMenu.removeAttribute('aria-expanded'); nBtn.removeAttribute('aria-expanded'); };
+
+    nBtn.addEventListener('mouseenter', ()=>{ if (timer) clearTimeout(timer); open(); });
+    nMenu.addEventListener('mouseenter', ()=>{ if (timer) clearTimeout(timer); open(); });
+    nBtn.addEventListener('click', (e)=>{ nMenu.classList.contains('show') ? close() : open(); e.stopPropagation(); });
+
+    const delayedClose = ()=>{ if (timer) clearTimeout(timer); timer = setTimeout(close, 200); };
+    nBtn.addEventListener('mouseleave', delayedClose);
+    nMenu.addEventListener('mouseleave', delayedClose);
+  }
+
+  // Outside click closes
+  document.addEventListener('click', (e)=>{ if (!e.target.closest('.menubar')) closeAll(); });
+  window.addEventListener('blur', ()=> closeAll());
+  window.addEventListener('resize', ()=> closeAll());
+
+  // Wire to existing controls
+  const bindClick = (id, targetId, extra) => {
+    const src = document.getElementById(id), tgt = document.getElementById(targetId);
+    if (src && tgt) src.addEventListener('click', ()=>{ closeAll(); tgt.click(); if (extra) extra(); });
+  };
+
+  const textArea = document.getElementById('textArea');
+  const boardArea = document.getElementById('board');
+
+  // File -> New: clear editor AND copy board
+  const btnNew = document.getElementById('mnuNewDoc');
+  if (btnNew && textArea){
+    btnNew.addEventListener('click', ()=>{
+      closeAll();
+      if (!confirm('Clear the editor and the Copy Board?')) return;
+
+      // clear editor
+      textArea.value = '';
+      // clear copy board (queue + textarea + pill)
+      if (Array.isArray(window.collectedItems)) {
+        window.collectedItems.length = 0;
+      }
+      if (boardArea) boardArea.value = '';
+      window.updateBoardView?.();
+
+      window.updateRowsCountPill?.();
+      window.pushSnapshot?.();
+  
+    });
+  }
+
+  // File helpers
+  bindClick('mnuImportBoard', 'importBtn');
+  bindClick('mnuClearBoard',  'clearBtn');
+  bindClick('mnuToggleBoard', 'toggleBoardBtn');
+
+  const tUI = document.getElementById('mnuToggleUI');
+  if (tUI && typeof window.toggleInterfaceHidden === 'function'){
+    tUI.addEventListener('click', ()=>{ closeAll(); window.toggleInterfaceHidden(); });
+  }
+
+  // Tools wiring
+  bindClick('mnuTokenizer', 'tokenizeBtn');
+  bindClick('mnuMath',      'mathButton');
+  bindClick('mnuFieldAdd',    'addFieldBtn');
+  bindClick('mnuFieldRemove', 'nthFieldRemover');
+
+  // IMPORTANT: Set Field is intentionally UNLINKED now.
+	const setField = document.getElementById('mnuFieldSet');
+	if (setField){
+	  setField.addEventListener('click', ()=>{ closeAll(); openSetFieldModal(); });
+	}
+
+
+  // Help menu opens the existing help/about modal
+  const mnuHelp = document.getElementById('mnuHelp');
+  if (mnuHelp){
+    mnuHelp.addEventListener('click', ()=>{ closeAll(); document.getElementById('helpBtn')?.click(); });
+  }
+
+  // About does nothing (placeholder)
+  const mnuAbout = document.getElementById('mnuAbout');
+  if (mnuAbout){
+    mnuAbout.addEventListener('click', ()=>{ closeAll(); /* no-op for now */ });
+  }
+
+  // Optional: List Extractor stub
+  const listX = document.getElementById('mnuListExtractor');
+  listX?.addEventListener('click', ()=>{ closeAll(); alert('List Extractor is coming soon.'); });
+})();
+</script>
 <!-- Duplicate End Tokens Modal -->
 <div class="overlay" id="dupes-modal" aria-hidden="true">
   <div class="dialog" role="dialog" aria-modal="true" aria-labelledby="dupesTitle">
@@ -1934,6 +2505,5 @@ function closeDupesModal() {
     </div>
   </div>
 </div>
-
 </body>
 </html>
