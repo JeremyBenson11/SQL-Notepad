@@ -1,3 +1,10 @@
+Aug 23rd, 2025
+
+* Fixed Clear Copyboard bug in menu.
+* Fixed Ctrl+S writing mode - hide menu writing mode works again.
+* Add List Extractor - Create a CSV list of x field from doc or x set.
+* Set # Pill - Introduced a set # output at the top.
+
 Aug 22nd, 2025
 
 * Added a menu.
