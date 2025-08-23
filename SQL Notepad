@@ -5,7 +5,7 @@
 <title>SQL Notepad</title>
 <meta name="viewport" content="width=device-width,initial-scale=1" />
 <style>
- :root {
+:root {
   --bg:#0f172a;
   --bg2:#0b1327;
   --panel:#0d1326;
@@ -106,13 +106,20 @@ body.interface-hidden .bar { display:none; }
   min-height: 0; /* allow child to stretch correctly */
 }
 .wrap.board-hidden { grid-template-columns: 1fr; }
+
+/* FIX: place .wrap on row 3 when interface is hidden so it fills the 3rd track */
+body.interface-hidden .wrap { 
+  grid-row: 3; 
+  grid-template-columns: 1fr !important; 
+}
+
 aside.panel {
   background: var(--panel); border-right:1px solid var(--border);
   display:flex; flex-direction:column;
 }
 aside.panel.hidden { display:none; }
 body.interface-hidden aside.panel { display:none !important; }
-body.interface-hidden .wrap { grid-template-columns: 1fr !important; }
+/* (grid columns are already collapsed above for hidden mode) */
 
 aside.panel h2 { margin: 12px 12px 4px; font-size:14px; color: var(--fg); font-weight:600; }
 aside.panel small { margin: 0 12px 8px; color: var(--muted); }
@@ -291,6 +298,11 @@ body.interface-hidden textarea#textArea { margin-left: 12px; }
 }
 .scopeInput:empty:before{ content: attr(data-ph); color: var(--muted); }
 
+/* List Extractor small tweaks (reuses .overlay and .dialog) */
+#list-extractor-modal .title { margin-bottom: 6px; }
+#list-extractor-modal .hint { margin-bottom: 8px; }
+#le_result { white-space: pre; }
+
 
 /* Show the safety button when hidden */
 body.interface-hidden #showControlsBtn { display: inline-block; }
@@ -335,7 +347,7 @@ body.interface-hidden #showControlsBtn { display: inline-block; }
         </li>
 
         <li class="appmenu-sep" aria-hidden="true"></li>
-        <li><button id="mnuListExtractor" role="menuitem">List Extractor (coming soon)</button></li>
+        <li><button id="mnuListExtractor" role="menuitem">List Extractor</button></li>
       </ul>
     </li>
 
@@ -357,9 +369,9 @@ body.interface-hidden #showControlsBtn { display: inline-block; }
   <div class="bar">
     <span class="pill" id="countPill">Copy Board: 0 items</span>
     <span class="pill" id="rowsCountPill">Set: 0 rows</span>
-    <button id="clearBtn"  class="secondary" title="Clear the Copy Board">Clear Copy Board</button>
+	<span class="pill" id="setNumPill">Set: 0 #</span>
     <button id="importBtn" class="secondary" title="Import text from system clipboard">Import Clipboard</button>
-
+	
     <button id="tokenizeBtn"   title="Replace last field in every tuple with a unique token">Tokenizer</button>
     <button id="nthFieldRemover" title="Remove the n’th field (1-based) from every tuple">Remove Field</button>
     <button id="addFieldBtn" title="Add a new field across all tuples">Add Field</button>
@@ -589,10 +601,10 @@ line'></textarea>
       <div class="hint">Personalize editor behaviors.</div>
 
       <div class="row">
-        <label>
-          <input type="checkbox" id="clearTokenOnDup">
-          Clear last field on duplicate (<kbd>Ctrl</kbd>+<kbd>D</kbd>)
-        </label>
+		<label>
+		  <input type="checkbox" id="clearLastField">
+		  Clear last field on Ctrl+D duplicate line
+		</label>
       </div>
 
       <div class="row">
@@ -754,6 +766,8 @@ const textArea   = document.getElementById('textArea');
 const boardArea  = document.getElementById('board');
 const countPill  = document.getElementById('countPill');
 const parsePill  = document.getElementById('parsePill');
+const setNumPill = document.getElementById('setNumPill');
+
 const rowsCountPill = document.getElementById('rowsCountPill');
 
 function updateBoardView() {
@@ -765,6 +779,14 @@ function updateBoardView() {
 function setParseModeLabel(mode) {
   if (parsePill) parsePill.textContent = `Parsing: ${mode}`;
 }
+
+// Clear the Copy Board queue + textarea + pill
+function clearCopyBoard() {
+  collectedItems.length = 0;
+  if (boardArea) boardArea.value = '';
+  updateBoardView();
+}
+
 
 /* ============================
    CSV-aware tokenization
@@ -927,27 +949,45 @@ function countTuplesInRange(lines, start, endExclusive) {
   return count;
 }
 function updateRowsCountPill() {
-  if (!rowsCountPill || !textArea) return;
+  if (!textArea) return;
+
   const text = textArea.value;
   const selStart = textArea.selectionStart ?? 0;
   const selEnd   = textArea.selectionEnd ?? selStart;
 
   const infoStart = getLineIndexAndColumn(text, selStart);
   const infoEnd   = getLineIndexAndColumn(text, Math.max(0, selEnd - (selEnd > 0 ? 1 : 0)));
-
   const lines = infoStart.lines;
   let startLine = infoStart.lineIndex;
   let endLine   = infoEnd.lineIndex;
 
-  if (selStart !== selEnd) {
-    const bounds = expandToSetBounds(lines, Math.min(startLine, endLine), Math.max(startLine, endLine));
-    const count = countTuplesInRange(lines, bounds.start, bounds.end);
-    rowsCountPill.textContent = `Set: ${count} row${count===1?'':'s'}`;
-  } else {
-    if (lines[startLine].trim() === '') { rowsCountPill.textContent = 'Set: 0 rows'; return; }
-    const bounds = expandToSetBounds(lines, startLine, startLine);
-    const count = countTuplesInRange(lines, bounds.start, bounds.end);
-    rowsCountPill.textContent = `Set: ${count} row${count===1?'':'s'}`;
+  // ---- update rows count pill ----
+  if (rowsCountPill) {
+    if (selStart !== selEnd) {
+      const bounds = expandToSetBounds(lines, Math.min(startLine, endLine), Math.max(startLine, endLine));
+      const count = countTuplesInRange(lines, bounds.start, bounds.end);
+      rowsCountPill.textContent = `Set: ${count} row${count===1?'':'s'}`;
+    } else {
+      if (lines[startLine].trim() === '') {
+        rowsCountPill.textContent = 'Set: 0 rows';
+      } else {
+        const bounds = expandToSetBounds(lines, startLine, startLine);
+        const count = countTuplesInRange(lines, bounds.start, bounds.end);
+        rowsCountPill.textContent = `Set: ${count} row${count===1?'':'s'}`;
+      }
+    }
+  }
+
+  // ---- update set number pill ----
+  if (setNumPill) {
+    const caretLine = infoStart.lineIndex;
+    const sets = enumerateSets(lines); // blocks separated by blank lines
+    let setIndex = 0;
+    for (let i = 0; i < sets.length; i++) {
+      const { start, end } = sets[i];
+      if (caretLine >= start && caretLine < end) { setIndex = i + 1; break; }
+    }
+    setNumPill.textContent = `Set: ${setIndex} #`;
   }
 }
 
@@ -1749,7 +1789,7 @@ applyFieldFieldBtn.addEventListener('click', () => {
 const settingsModal = document.getElementById('settings-modal');
 const settingsBtn   = document.getElementById('settingsBtn');
 const settingsClose = document.getElementById('settingsCloseBtn');
-const clearOnDupChk = document.getElementById('clearTokenOnDup');
+const clearOnDupChk = document.getElementById('clearLastField');
 const tokenizerReplaceAllChk = document.getElementById('tokenizerReplaceAll');
 const tokenStyleSel = document.getElementById('tokenStyle');
 const tokenLengthInp= document.getElementById('tokenLength');
@@ -2447,7 +2487,6 @@ function closeDupesModal() {
 
   // File helpers
   bindClick('mnuImportBoard', 'importBtn');
-  bindClick('mnuClearBoard',  'clearBtn');
   bindClick('mnuToggleBoard', 'toggleBoardBtn');
 
   const tUI = document.getElementById('mnuToggleUI');
@@ -2481,8 +2520,193 @@ function closeDupesModal() {
   }
 
   // Optional: List Extractor stub
-  const listX = document.getElementById('mnuListExtractor');
-  listX?.addEventListener('click', ()=>{ closeAll(); alert('List Extractor is coming soon.'); });
+ // Wire Tools -> List Extractor to new modal
+const listX = document.getElementById('mnuListExtractor');
+if (listX) {
+  listX.addEventListener('click', () => {
+    closeAll();
+    window.openListExtractor?.();
+  });
+}
+
+  // File -> Clear Copy Board: clear queue directly (no UI button required)
+const mnuClearBoard = document.getElementById('mnuClearBoard');
+if (mnuClearBoard) {
+  mnuClearBoard.addEventListener('click', () => {
+    closeAll();
+    clearCopyBoard();
+  });
+}
+
+  
+})();
+</script>
+<script>
+/* ============================
+   List Extractor (modular, lazy init + single wiring)
+=============================*/
+(function(){
+  // State
+  let wired = false;
+
+  // DOM refs (assigned in ensureRefs)
+  let modal, scopeEl, fldInp, modeSel, trimChk, uniqChk, outTA, countEl, genBtn, copyBtn, closeBtn;
+
+  // Helper: parse SQL field to plain text/number-ish string
+  function fieldToPlain(raw){
+    const t = String(raw).trim();
+    if (t.startsWith("'") && t.endsWith("'")){
+      return t.slice(1,-1).replace(/''/g,"'");
+    }
+    const n = Number(t);
+    return Number.isFinite(n) ? String(n) : t;
+  }
+
+  // Ensure modal DOM + listeners exist (wire once)
+  function ensureRefs(){
+  if (wired) return true;
+
+  modal   = document.getElementById('list-extractor-modal');
+  scopeEl = document.getElementById('listScopeInput');
+  fldInp  = document.getElementById('le_field');
+  modeSel = document.getElementById('le_output_mode');
+  trimChk = document.getElementById('le_trim');
+  uniqChk = document.getElementById('le_unique');
+  outTA   = document.getElementById('le_result');
+  countEl = document.getElementById('le_count');
+  copyBtn = document.getElementById('le_copyBtn');
+  closeBtn= document.getElementById('le_closeBtn');
+
+  // ✅ removed genBtn entirely
+  if (!modal || !fldInp || !modeSel || !trimChk || !uniqChk || !outTA || !countEl || !copyBtn || !closeBtn) {
+    console.warn('[ListExtractor] Modal not found in DOM yet.');
+    return false;
+  }
+
+  // Wire actions
+  copyBtn.addEventListener('click', () => {
+    if (outTA.value) navigator.clipboard.writeText(outTA.value).catch(()=>{});
+  });
+  closeBtn.addEventListener('click', closeModal);
+  modal.addEventListener('click', (e)=>{ if (e.target === modal) closeModal(); });
+
+  // ✅ Live updates (auto-generate)
+  [modeSel, trimChk, uniqChk].forEach(el => el.addEventListener('change', generate));
+  fldInp.addEventListener('input', generate);
+  scopeEl.addEventListener('input', generate);
+
+  wired = true;
+  return true;
+}
+
+  // Scope helpers (mirrors Set Field modal)
+  function enumerateSetsLocal(lines){
+    // Use app’s enumerateSets if available
+    if (typeof window.enumerateSets === 'function') return window.enumerateSets(lines);
+    const sets = [];
+    const isBlank = (i) => !lines[i] || lines[i].trim() === '';
+    let i = 0, n = lines.length;
+    while (i < n){
+      while (i < n && isBlank(i)) i++;
+      if (i >= n) break;
+      const start = i;
+      while (i < n && !isBlank(i)) i++;
+      sets.push({ start, end: i });
+    }
+    return sets;
+  }
+
+  function getScopeBoundsForList(){
+    const ta = document.getElementById('textArea');
+    const lines = (ta?.value || '').split(/\r?\n/);
+    const raw = (scopeEl?.textContent || '').trim().toLowerCase();
+
+    if (raw === 'doc' || raw === 'document' || raw === 'all'){
+      return { lines, start: 0, end: lines.length };
+    }
+    if (/^\d+$/.test(raw)){
+      const n = parseInt(raw, 10);
+      const sets = enumerateSetsLocal(lines);
+      if (n >= 1 && n <= sets.length){
+        return { lines, start: sets[n - 1].start, end: sets[n - 1].end };
+      }
+      alert(`Set #${n} not found. There ${sets.length===1 ? 'is 1 set' : 'are ' + sets.length + ' sets'}. Using document.`);
+    }
+    return { lines, start: 0, end: lines.length };
+  }
+
+  // Collect values
+  function collectFieldValues(fieldIdx0){
+    if (typeof window.findAllTuplesInLineSmart !== 'function' || typeof window.splitFieldsRobust !== 'function'){
+      alert('List Extractor requires tuple helpers present in the app.');
+      return [];
+    }
+    const { lines, start, end } = getScopeBoundsForList();
+    const vals = [];
+
+    for (let li = start; li < end; li++){
+      const line = lines[li];
+      if (!line || !line.trim()) continue;
+      const tuples = window.findAllTuplesInLineSmart(line);
+      if (!tuples.length) continue;
+
+      for (const t of tuples){
+        const parts = window.splitFieldsRobust(t.raw);
+        if (fieldIdx0 < 0 || fieldIdx0 >= parts.length) continue;
+        let v = fieldToPlain(parts[fieldIdx0]);
+        if (trimChk.checked) v = String(v).trim();
+        vals.push(v);
+      }
+    }
+    return vals;
+  }
+
+  // Render output
+  function renderOutput(values){
+    const items = uniqChk.checked ? Array.from(new Set(values)) : values.slice();
+    const text = (modeSel.value === 'lines')
+      ? items.join('\n')
+      : items.map(s => {
+          const needsQuote = /[",\n]/.test(s);
+          const cell = s.replace(/"/g, '""');
+          return needsQuote ? `"${cell}"` : cell;
+        }).join(', ');
+    outTA.value = text;
+    countEl.textContent = `${items.length} item${items.length===1?'':'s'}`;
+  }
+
+  function generate(){
+    const f = Number(fldInp.value);
+    if (!Number.isInteger(f) || f < 1){
+      alert('Field # must be an integer ≥ 1.');
+      return;
+    }
+    const vals = collectFieldValues(f - 1);
+    renderOutput(vals);
+  }
+
+  function openModal(){
+  if (!ensureRefs()) return;
+
+  // Default scope text if empty
+  if (!scopeEl.textContent.trim()) scopeEl.textContent = 'doc';
+
+  // Show modal
+  modal.style.display = 'flex';
+
+  // Focus Field # after paint
+  setTimeout(() => fldInp.focus(), 0);
+
+  // Auto-generate output immediately
+  generate();
+}
+
+  function closeModal(){ if (modal) modal.style.display = 'none'; }
+
+  // Public opener used by the menubar wiring
+  window.openListExtractor = openModal;
+
+  // (Intentionally NOT wiring the menu item here; the menubar script already does it and calls closeAll().)
 })();
 </script>
 <!-- Duplicate End Tokens Modal -->
@@ -2502,6 +2726,64 @@ function closeDupesModal() {
     <div class="btns" style="margin-top:12px;">
       <button id="dupesCopyAllBtn" class="dupeBtn">Copy All</button>
       <button id="dupesCloseBtn" class="primary">Close</button>
+    </div>
+  </div>
+</div>
+<!-- List Extractor Modal -->
+<div class="overlay" id="list-extractor-modal" aria-hidden="true">
+  <div class="dialog" role="dialog" aria-modal="true" aria-labelledby="listExtractorTitle">
+    <div class="title" id="listExtractorTitle">List Extractor</div>
+    <div class="hint">Build a CSV list from a specific field across <b>doc</b> or a set number.</div>
+
+    <div class="divider"></div>
+
+    <!-- Scope (same pattern as Set Field modal) -->
+    <div class="title" style="font-size:14px; margin:0;">Scope</div>
+    <div class="row">
+      <div id="listScopeInput" class="scopeInput" contenteditable="true" data-ph="doc or 1, 2, 3…">doc</div>
+      <small class="hint" style="margin-top:11px;">Type <b>doc</b> for the whole document, or a 1-based set number.</small>
+    </div>
+
+    <div class="divider"></div>
+
+    <!-- Field + output options -->
+    <div class="row">
+      <label>Field #
+        <input type="number" id="le_field" min="1" value="1" style="width:90px;">
+      </label>
+
+      <label>Output
+        <select id="le_output_mode">
+          <option value="csv">Comma-separated (single line)</option>
+          <option value="lines">One per line</option>
+        </select>
+      </label>
+
+      <label>
+        <input type="checkbox" id="le_trim" checked>
+        Trim values
+      </label>
+
+      <label>
+        <input type="checkbox" id="le_unique">
+        Unique only
+      </label>
+    </div>
+
+    <div class="divider"></div>
+
+    <!-- Results -->
+    <div class="row" style="width:100%;">
+      <textarea id="le_result" readonly
+        style="width:100%; min-height:160px; resize:vertical; background:var(--editor); color:var(--fg); border:1px solid var(--border); border-radius:8px; padding:10px; font-family: ui-monospace, Menlo, Consolas, monospace; font-size:13px;"></textarea>
+    </div>
+
+    <div class="row" style="justify-content:space-between; align-items:center;">
+      <span id="le_count" class="hint">0 items</span>
+      <div class="btns" style="margin:0;">
+        <button id="le_copyBtn" class="dupeBtn">Copy</button>
+        <button id="le_closeBtn" class="primary">Close</button>
+      </div>
     </div>
   </div>
 </div>
