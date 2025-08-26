@@ -190,7 +190,7 @@ body.interface-hidden textarea#textArea { margin-left: 12px; }
 /* Safety button to restore UI when hidden */
 #showControlsBtn {
   position: fixed;
-  top: 8px;
+  top: 12px;
   right: 8px;
   z-index: 10000;
   display: none;
@@ -303,6 +303,65 @@ body.interface-hidden textarea#textArea { margin-left: 12px; }
 #list-extractor-modal .hint { margin-bottom: 8px; }
 #le_result { white-space: pre; }
 
+/* Field Swapper modal styles (scoped by #field-swapper-modal) */
+  #field-swapper-modal .title { margin-bottom: 6px; }
+  #field-swapper-modal .hint { margin-bottom: 8px; }
+
+  .fs-list-wrap {
+    border: 1px solid var(--border);
+    background: var(--editor);
+    border-radius: 10px;
+    padding: 6px;
+  }
+  .fs-list {
+    max-height: 320px;
+    overflow: auto;
+    margin: 0;
+    padding: 0;
+    list-style: none;
+  }
+  .fs-item {
+    display: grid;
+    grid-template-columns: 24px 64px 1fr;
+    align-items: center;
+    gap: 8px;
+    padding: 8px;
+    border-radius: 8px;
+    border: 1px dashed transparent;
+    user-select: none;
+  }
+  .fs-item + .fs-item { margin-top: 6px; }
+  .fs-item[draggable="true"] { cursor: grab; }
+  .fs-item.dragging { opacity: 0.6; }
+  .fs-item.drop-before { border-color: var(--accent); }
+  .fs-item.drop-after  { border-color: var(--accent); }
+
+  .fs-handle {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+  }
+  .fs-num {
+    font: 12px/1 ui-monospace, Menlo, Consolas, monospace;
+    color: var(--muted);
+    background: var(--pill);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 4px 8px;
+    text-align: center;
+  }
+  .fs-name[contenteditable="true"] {
+    min-height: 28px;
+    padding: 6px 8px;
+    border-radius: 8px;
+    border: 1px solid var(--border);
+    background: var(--bg2);
+    outline: none;
+  }
+  .fs-name[contenteditable="true"]:empty:before {
+    content: attr(data-ph);
+    color: var(--muted);
+  }
 
 /* Show the safety button when hidden */
 body.interface-hidden #showControlsBtn { display: inline-block; }
@@ -343,6 +402,7 @@ body.interface-hidden #showControlsBtn { display: inline-block; }
             <li><button id="mnuFieldAdd"    role="menuitem">Add Field</button></li>
             <li><button id="mnuFieldRemove" role="menuitem">Remove Field</button></li>
             <li><button id="mnuFieldSet"    role="menuitem">Set Field</button></li>
+			<li><button id="mnuFieldSwapper" role="menuitem">Swapper</button></li>
           </ul>
         </li>
 
@@ -2787,5 +2847,238 @@ if (mnuClearBoard) {
     </div>
   </div>
 </div>
+<!-- Field Swapper Modal -->
+<div class="overlay" id="field-swapper-modal" aria-hidden="true">
+  <div class="dialog" role="dialog" aria-modal="true" aria-labelledby="fsTitle">
+    <div class="title" id="fsTitle">Field Swapper</div>
+    <div class="hint">
+      Drag to reorder. Double-click a name to edit. Applies to the whole document.
+    </div>
+
+    <div class="fs-list-wrap">
+      <ul class="fs-list" id="fsList" aria-label="Field order"></ul>
+    </div>
+
+    <div class="btns" style="margin-top:12px;">
+      <button id="fsCancelBtn">Cancel</button>
+      <button id="fsApplyBtn" class="primary">Apply Order to Document</button>
+    </div>
+  </div>
+</div>
+<script id="field-swapper-plugin">
+(() => {
+  // ---- LocalStorage key for user-edited field names ----
+  const NAMES_KEY = 'sqlFieldDump.fieldNames';
+
+  // ---- Helpers: reuse robust tuple parsing from app ----
+  const splitFields = window.splitFieldsRobust;
+  const findTuples  = window.findAllTuplesInLineSmart;
+  const joinFields  = window.joinFields;
+
+  // Guard
+  if (typeof splitFields !== 'function' || typeof findTuples !== 'function' || typeof joinFields !== 'function') {
+    console.warn('[FieldSwapper] Required tuple helpers missing.');
+    return;
+  }
+
+  const textArea = document.getElementById('textArea');
+  const modal = document.getElementById('field-swapper-modal');
+  const listEl = document.getElementById('fsList');
+  const applyBtn = document.getElementById('fsApplyBtn');
+  const cancelBtn = document.getElementById('fsCancelBtn');
+
+  // Load/save editable names
+  function loadNames() {
+    try { return JSON.parse(localStorage.getItem(NAMES_KEY) || '{}'); }
+    catch { return {}; }
+  }
+  function saveNames(map) {
+    try { localStorage.setItem(NAMES_KEY, JSON.stringify(map || {})); } catch {}
+  }
+
+  // Determine max field count across the entire document
+  function maxFieldCountAcrossDoc() {
+    const lines = (textArea.value || '').split(/\r?\n/);
+    let max = 0;
+    for (const line of lines) {
+      if (!line.trim()) continue;
+      const tuples = findTuples(line);
+      for (const t of tuples) {
+        const parts = splitFields(t.raw);
+        if (parts.length > max) max = parts.length;
+      }
+    }
+    return max;
+  }
+
+  // Build draggable list 1..N with editable names
+  function buildList() {
+    const names = loadNames();
+    const N = maxFieldCountAcrossDoc() || 0;
+    listEl.innerHTML = '';
+    for (let i = 1; i <= N; i++) {
+      const li = document.createElement('li');
+      li.className = 'fs-item';
+      li.draggable = true;
+      li.dataset.index = String(i); // 1-based original position
+
+      const handle = document.createElement('span');
+      handle.className = 'fs-handle';
+      handle.innerHTML = `
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none"
+             stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"
+             aria-hidden="true"><path d="M8 6h13M3 6h.01M8 12h13M3 12h.01M8 18h13M3 18h.01"/></svg>`;
+
+      const num = document.createElement('span');
+      num.className = 'fs-num';
+      num.textContent = `#${i}`;
+
+      const name = document.createElement('div');
+      name.className = 'fs-name';
+      name.contentEditable = 'true';
+      name.spellcheck = false;
+      name.dataset.ph = `Field ${i}`;
+      name.textContent = (names && typeof names[i] === 'string') ? names[i] : '';
+
+      // Persist edits
+      name.addEventListener('input', () => {
+        const map = loadNames();
+        const val = name.textContent.trim();
+        if (val) map[i] = val; else delete map[i];
+        saveNames(map);
+      });
+
+      li.append(handle, num, name);
+      listEl.appendChild(li);
+    }
+    wireDnD(listEl);
+  }
+
+  // Simple vanilla HTML5 Drag-and-Drop
+  function wireDnD(container) {
+    let dragging = null;
+
+    container.addEventListener('dragstart', e => {
+      const li = e.target.closest('.fs-item');
+      if (!li) return;
+      dragging = li;
+      li.classList.add('dragging');
+      e.dataTransfer.setData('text/plain', li.dataset.index); // not really used
+      e.dataTransfer.effectAllowed = 'move';
+    });
+
+    container.addEventListener('dragend', () => {
+      if (dragging) dragging.classList.remove('dragging');
+      dragging = null;
+      Array.from(container.children).forEach(ch => ch.classList.remove('drop-before','drop-after'));
+    });
+
+    container.addEventListener('dragover', e => {
+      if (!dragging) return;
+      e.preventDefault();
+      const after = getDragAfterElement(container, e.clientY);
+      Array.from(container.children).forEach(ch => ch.classList.remove('drop-before','drop-after'));
+      if (!after) {
+        // dropping at end
+        container.lastElementChild?.classList.add('drop-after');
+      } else {
+        after.classList.add('drop-before');
+      }
+    });
+
+    container.addEventListener('drop', e => {
+      if (!dragging) return;
+      e.preventDefault();
+      const after = getDragAfterElement(container, e.clientY);
+      if (!after) container.appendChild(dragging);
+      else container.insertBefore(dragging, after);
+    });
+
+    function getDragAfterElement(container, y) {
+      const els = [...container.querySelectorAll('.fs-item:not(.dragging)')];
+      let closest = null;
+      let closestOffset = Number.NEGATIVE_INFINITY;
+      for (const el of els) {
+        const rect = el.getBoundingClientRect();
+        const offset = y - (rect.top + rect.height / 2);
+        // we want the closest element above the cursor
+        if (offset < 0 && offset > closestOffset) {
+          closestOffset = offset;
+          closest = el;
+        }
+      }
+      return closest;
+    }
+  }
+
+  // Open/close modal
+  function openModal() {
+    buildList();
+    modal.style.display = 'flex';
+    setTimeout(() => {
+      const firstName = listEl.querySelector('.fs-name');
+      if (firstName) firstName.focus();
+    }, 0);
+  }
+  function closeModal() {
+    modal.style.display = 'none';
+  }
+
+  // Apply: reorder all tuples in the entire document
+  function applyOrderToDocument() {
+    const order = [...listEl.children].map(li => Number(li.dataset.index)); // 1-based array
+    if (!order.length) { closeModal(); return; }
+
+    const lines = textArea.value.split(/\r?\n/);
+    for (let li = 0; li < lines.length; li++) {
+      let line = lines[li];
+      if (!line.trim()) continue;
+
+      const tuples = findTuples(line);
+      if (!tuples.length) continue;
+
+      // mutate right-to-left to preserve indices while replacing
+      let out = line;
+      for (let k = tuples.length - 1; k >= 0; k--) {
+        const cur = findTuples(out)[k]; // refresh on current string
+        const before = out.slice(0, cur.open);
+        const after  = out.slice(cur.close);
+
+        const parts = splitFields(cur.raw);
+        // Build reordered parts (keep tuple length; ignore indices beyond length)
+        const picked = [];
+        for (let i = 0; i < parts.length; i++) {
+          const src1 = order[i]; // the field # that should now occupy position i+1
+          const src0 = (src1 | 0) - 1;
+          if (src0 >= 0 && src0 < parts.length) picked.push(parts[src0]);
+          else picked.push(parts[i]); // fallback: original
+        }
+        const replaced = joinFields(picked);
+        out = before + replaced + after;
+      }
+      lines[li] = out;
+    }
+    textArea.value = lines.join('\n');
+
+    // integrate with your snapshot/rows UI if present
+    if (typeof window.pushSnapshot === 'function') window.pushSnapshot();
+    if (typeof window.updateRowsCountPill === 'function') window.updateRowsCountPill();
+
+    closeModal();
+  }
+
+  // Wire buttons
+  applyBtn.addEventListener('click', applyOrderToDocument);
+  cancelBtn.addEventListener('click', closeModal);
+  modal.addEventListener('click', (e) => { if (e.target === modal) closeModal(); });
+
+  // Menu item → open modal (no changes to existing menubar script required)
+  const mnu = document.getElementById('mnuFieldSwapper');
+  if (mnu) mnu.addEventListener('click', () => openModal());
+
+  // Also expose opener if you want to bind elsewhere later
+  window.openFieldSwapper = openModal;
+})();
+</script>
 </body>
 </html>
