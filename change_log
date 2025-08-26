@@ -1,6 +1,6 @@
 Aug 26th, 2050
 
-* Fixed bug if swapper. Now using session storage for field names.
+* Fixed bug in swapper. Now using session storage for field names.
 * Added field swapper in Tools -> Field -> Swapper. Can name fields and jumble them into a new order.
 
 Notes - More edits to come. Lost phone from hood drive. Will be back in full swing within a week or two.
