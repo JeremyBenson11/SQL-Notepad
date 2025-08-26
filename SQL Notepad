@@ -2867,36 +2867,44 @@ if (mnuClearBoard) {
 </div>
 <script id="field-swapper-plugin">
 (() => {
-  // ---- LocalStorage key for user-edited field names ----
-  const NAMES_KEY = 'sqlFieldDump.fieldNames';
+  // ===== Session-scoped keys (forget on full browser restart) =====
+  const NAMES_KEY = 'sqlFieldDump.fieldNames';   // { "1": "Name", "2": "Qty", ... }
+  const ORDER_KEY = 'sqlFieldDump.fieldOrder';   // [3,1,2,...]  (1-based indices in new order)
 
-  // ---- Helpers: reuse robust tuple parsing from app ----
+  // ===== Tuple helpers provided by the host app =====
   const splitFields = window.splitFieldsRobust;
   const findTuples  = window.findAllTuplesInLineSmart;
   const joinFields  = window.joinFields;
 
-  // Guard
   if (typeof splitFields !== 'function' || typeof findTuples !== 'function' || typeof joinFields !== 'function') {
     console.warn('[FieldSwapper] Required tuple helpers missing.');
     return;
   }
 
   const textArea = document.getElementById('textArea');
-  const modal = document.getElementById('field-swapper-modal');
-  const listEl = document.getElementById('fsList');
+  const modal    = document.getElementById('field-swapper-modal');
+  const listEl   = document.getElementById('fsList');
   const applyBtn = document.getElementById('fsApplyBtn');
-  const cancelBtn = document.getElementById('fsCancelBtn');
+  const cancelBtn= document.getElementById('fsCancelBtn');
+  const mnu      = document.getElementById('mnuFieldSwapper');
 
-  // Load/save editable names
+  // ===== Session storage helpers =====
   function loadNames() {
-    try { return JSON.parse(localStorage.getItem(NAMES_KEY) || '{}'); }
+    try { return JSON.parse(sessionStorage.getItem(NAMES_KEY) || '{}'); }
     catch { return {}; }
   }
   function saveNames(map) {
-    try { localStorage.setItem(NAMES_KEY, JSON.stringify(map || {})); } catch {}
+    try { sessionStorage.setItem(NAMES_KEY, JSON.stringify(map || {})); } catch {}
+  }
+  function loadOrder() {
+    try { return JSON.parse(sessionStorage.getItem(ORDER_KEY) || '[]'); }
+    catch { return []; }
+  }
+  function saveOrder(arr) {
+    try { sessionStorage.setItem(ORDER_KEY, JSON.stringify(arr || [])); } catch {}
   }
 
-  // Determine max field count across the entire document
+  // ===== Inspect document to determine max field count =====
   function maxFieldCountAcrossDoc() {
     const lines = (textArea.value || '').split(/\r?\n/);
     let max = 0;
@@ -2911,12 +2919,21 @@ if (mnuClearBoard) {
     return max;
   }
 
-  // Build draggable list 1..N with editable names
+  // ===== Build draggable list: apply saved order & names (session only) =====
   function buildList() {
     const names = loadNames();
     const N = maxFieldCountAcrossDoc() || 0;
+
+    // base order [1..N]
+    let base = Array.from({ length: N }, (_, i) => i + 1);
+
+    // merge with saved order (ignore invalid/out-of-range, append any missing)
+    const saved = loadOrder().filter(n => Number.isInteger(n) && n >= 1 && n <= N);
+    const used  = new Set(saved);
+    const merged = [...saved, ...base.filter(n => !used.has(n))];
+
     listEl.innerHTML = '';
-    for (let i = 1; i <= N; i++) {
+    for (const i of merged) {
       const li = document.createElement('li');
       li.className = 'fs-item';
       li.draggable = true;
@@ -2940,7 +2957,7 @@ if (mnuClearBoard) {
       name.dataset.ph = `Field ${i}`;
       name.textContent = (names && typeof names[i] === 'string') ? names[i] : '';
 
-      // Persist edits
+      // Persist edits to session only
       name.addEventListener('input', () => {
         const map = loadNames();
         const val = name.textContent.trim();
@@ -2951,10 +2968,11 @@ if (mnuClearBoard) {
       li.append(handle, num, name);
       listEl.appendChild(li);
     }
+
     wireDnD(listEl);
   }
 
-  // Simple vanilla HTML5 Drag-and-Drop
+  // ===== Drag & Drop (vanilla) + save order in session =====
   function wireDnD(container) {
     let dragging = null;
 
@@ -2963,14 +2981,16 @@ if (mnuClearBoard) {
       if (!li) return;
       dragging = li;
       li.classList.add('dragging');
-      e.dataTransfer.setData('text/plain', li.dataset.index); // not really used
       e.dataTransfer.effectAllowed = 'move';
+      try { e.dataTransfer.setData('text/plain', li.dataset.index); } catch {}
     });
 
     container.addEventListener('dragend', () => {
       if (dragging) dragging.classList.remove('dragging');
       dragging = null;
       Array.from(container.children).forEach(ch => ch.classList.remove('drop-before','drop-after'));
+      // Save order after a drag completes
+      saveOrder([...container.children].map(li => Number(li.dataset.index)));
     });
 
     container.addEventListener('dragover', e => {
@@ -2979,7 +2999,6 @@ if (mnuClearBoard) {
       const after = getDragAfterElement(container, e.clientY);
       Array.from(container.children).forEach(ch => ch.classList.remove('drop-before','drop-after'));
       if (!after) {
-        // dropping at end
         container.lastElementChild?.classList.add('drop-after');
       } else {
         after.classList.add('drop-before');
@@ -3001,7 +3020,6 @@ if (mnuClearBoard) {
       for (const el of els) {
         const rect = el.getBoundingClientRect();
         const offset = y - (rect.top + rect.height / 2);
-        // we want the closest element above the cursor
         if (offset < 0 && offset > closestOffset) {
           closestOffset = offset;
           closest = el;
@@ -3011,23 +3029,21 @@ if (mnuClearBoard) {
     }
   }
 
-  // Open/close modal
+  // ===== Modal open/close =====
   function openModal() {
     buildList();
     modal.style.display = 'flex';
-    setTimeout(() => {
-      const firstName = listEl.querySelector('.fs-name');
-      if (firstName) firstName.focus();
-    }, 0);
+    setTimeout(() => listEl.querySelector('.fs-name')?.focus(), 0);
   }
-  function closeModal() {
-    modal.style.display = 'none';
-  }
+  function closeModal() { modal.style.display = 'none'; }
 
-  // Apply: reorder all tuples in the entire document
+  // ===== Apply order across whole document (preserves quoted strings/escapes) =====
   function applyOrderToDocument() {
-    const order = [...listEl.children].map(li => Number(li.dataset.index)); // 1-based array
+    const order = [...listEl.children].map(li => Number(li.dataset.index)); // 1-based
     if (!order.length) { closeModal(); return; }
+
+    // save current order to session (in case user cancels later and reopens)
+    saveOrder(order);
 
     const lines = textArea.value.split(/\r?\n/);
     for (let li = 0; li < lines.length; li++) {
@@ -3037,48 +3053,48 @@ if (mnuClearBoard) {
       const tuples = findTuples(line);
       if (!tuples.length) continue;
 
-      // mutate right-to-left to preserve indices while replacing
       let out = line;
       for (let k = tuples.length - 1; k >= 0; k--) {
-        const cur = findTuples(out)[k]; // refresh on current string
+        const cur = findTuples(out)[k]; // refresh tuple indices for current string
         const before = out.slice(0, cur.open);
         const after  = out.slice(cur.close);
+        const parts  = splitFields(cur.raw);
 
-        const parts = splitFields(cur.raw);
-        // Build reordered parts (keep tuple length; ignore indices beyond length)
+        // Build reordered tuple: position i takes field #order[i] (1-based)
         const picked = [];
         for (let i = 0; i < parts.length; i++) {
-          const src1 = order[i]; // the field # that should now occupy position i+1
-          const src0 = (src1 | 0) - 1;
-          if (src0 >= 0 && src0 < parts.length) picked.push(parts[src0]);
-          else picked.push(parts[i]); // fallback: original
+          const src1 = order[i];               // which original field now goes to (i+1)
+          const src0 = (src1 | 0) - 1;         // 0-based
+          picked.push((src0 >= 0 && src0 < parts.length) ? parts[src0] : parts[i]);
         }
+
         const replaced = joinFields(picked);
         out = before + replaced + after;
       }
       lines[li] = out;
     }
+
     textArea.value = lines.join('\n');
 
-    // integrate with your snapshot/rows UI if present
-    if (typeof window.pushSnapshot === 'function') window.pushSnapshot();
-    if (typeof window.updateRowsCountPill === 'function') window.updateRowsCountPill();
+    // integrate with host UI
+    window.pushSnapshot?.();
+    window.updateRowsCountPill?.();
 
     closeModal();
   }
 
-  // Wire buttons
-  applyBtn.addEventListener('click', applyOrderToDocument);
-  cancelBtn.addEventListener('click', closeModal);
-  modal.addEventListener('click', (e) => { if (e.target === modal) closeModal(); });
+  // ===== Wire controls =====
+  applyBtn?.addEventListener('click', applyOrderToDocument);
+  cancelBtn?.addEventListener('click', closeModal);
+  modal?.addEventListener('click', (e) => { if (e.target === modal) closeModal(); });
 
-  // Menu item → open modal (no changes to existing menubar script required)
-  const mnu = document.getElementById('mnuFieldSwapper');
-  if (mnu) mnu.addEventListener('click', () => openModal());
+  // Menu item (Tools → Field → Swapper)
+  if (mnu) mnu.addEventListener('click', openModal);
 
-  // Also expose opener if you want to bind elsewhere later
+  // Also expose a programmatic opener if needed elsewhere
   window.openFieldSwapper = openModal;
 })();
 </script>
+
 </body>
 </html>
