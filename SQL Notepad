@@ -2866,160 +2866,218 @@ if (mnuClearBoard) {
   </div>
 </div>
 <script id="field-swapper-plugin">
-(() => {
-  // ===== Session-scoped keys (forget on full browser restart) =====
-  const NAMES_KEY = 'sqlFieldDump.fieldNames';   // { "1": "Name", "2": "Qty", ... }
-  const ORDER_KEY = 'sqlFieldDump.fieldOrder';   // [3,1,2,...]  (1-based indices in new order)
+(function () {
+  // ===== Session-only persistence (clears when the browser app fully quits) =====
+  var NAMES_KEY = 'sqlFieldDump.fieldNames'; // names keyed by position (1..N) for the CURRENT state
+  var ORDER_KEY = 'sqlFieldDump.fieldOrder'; // list order (1..N)
 
-  // ===== Tuple helpers provided by the host app =====
-  const splitFields = window.splitFieldsRobust;
-  const findTuples  = window.findAllTuplesInLineSmart;
-  const joinFields  = window.joinFields;
+  // ===== Tuple helpers provided by host app =====
+  var splitFields = window.splitFieldsRobust;
+  var findTuples  = window.findAllTuplesInLineSmart;
+  var joinFields  = window.joinFields;
 
   if (typeof splitFields !== 'function' || typeof findTuples !== 'function' || typeof joinFields !== 'function') {
     console.warn('[FieldSwapper] Required tuple helpers missing.');
     return;
   }
 
-  const textArea = document.getElementById('textArea');
-  const modal    = document.getElementById('field-swapper-modal');
-  const listEl   = document.getElementById('fsList');
-  const applyBtn = document.getElementById('fsApplyBtn');
-  const cancelBtn= document.getElementById('fsCancelBtn');
-  const mnu      = document.getElementById('mnuFieldSwapper');
+  var textArea = document.getElementById('textArea');
+  var menuItem = document.getElementById('mnuFieldSwapper');
 
-  // ===== Session storage helpers =====
-  function loadNames() {
-    try { return JSON.parse(sessionStorage.getItem(NAMES_KEY) || '{}'); }
-    catch { return {}; }
-  }
-  function saveNames(map) {
-    try { sessionStorage.setItem(NAMES_KEY, JSON.stringify(map || {})); } catch {}
-  }
-  function loadOrder() {
-    try { return JSON.parse(sessionStorage.getItem(ORDER_KEY) || '[]'); }
-    catch { return []; }
-  }
-  function saveOrder(arr) {
-    try { sessionStorage.setItem(ORDER_KEY, JSON.stringify(arr || [])); } catch {}
+  // ===== Lazy DOM refs so placement of HTML doesn't matter =====
+  var modal, listEl, applyBtn, cancelBtn;
+  function ensureRefs() {
+    if (!modal)     modal     = document.getElementById('field-swapper-modal');
+    if (!listEl)    listEl    = document.getElementById('fsList');
+    if (!applyBtn)  applyBtn  = document.getElementById('fsApplyBtn');
+    if (!cancelBtn) cancelBtn = document.getElementById('fsCancelBtn');
+    return !!(modal && listEl && applyBtn && cancelBtn && textArea);
   }
 
-  // ===== Inspect document to determine max field count =====
+  // ===== sessionStorage helpers =====
+  function loadJSON(key, fallback) {
+    try {
+      var v = sessionStorage.getItem(key);
+      return v ? JSON.parse(v) : fallback;
+    } catch (e) { return fallback; }
+  }
+  function saveJSON(key, val) {
+    try { sessionStorage.setItem(key, JSON.stringify(val)); } catch (e) {}
+  }
+
+  function loadNames() { return loadJSON(NAMES_KEY, {}); }
+  function saveNames(map) { saveJSON(NAMES_KEY, map || {}); }
+  function loadOrder() { return loadJSON(ORDER_KEY, []); }
+  function saveOrder(arr) { saveJSON(ORDER_KEY, arr || []); }
+
+  // ===== Inspect document for max field count =====
   function maxFieldCountAcrossDoc() {
-    const lines = (textArea.value || '').split(/\r?\n/);
-    let max = 0;
-    for (const line of lines) {
-      if (!line.trim()) continue;
-      const tuples = findTuples(line);
-      for (const t of tuples) {
-        const parts = splitFields(t.raw);
+    var lines = (textArea.value || '').split(/\r?\n/);
+    var max = 0;
+    for (var i = 0; i < lines.length; i++) {
+      var line = lines[i];
+      if (!line || !line.trim()) continue;
+      var tuples = findTuples(line);
+      for (var t = 0; t < tuples.length; t++) {
+        var parts = splitFields(tuples[t].raw);
         if (parts.length > max) max = parts.length;
       }
     }
     return max;
   }
 
-  // ===== Build draggable list: apply saved order & names (session only) =====
+  // ===== Build one row (no template literals to avoid quoting issues) =====
+  function createRow(fieldIndex, currentName) {
+    var li = document.createElement('li');
+    li.className = 'fs-item';
+    li.draggable = true;
+    li.setAttribute('data-index', String(fieldIndex)); // 1-based label for THIS list position
+
+    var handle = document.createElement('span');
+    handle.className = 'fs-handle';
+    handle.innerHTML =
+      '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" ' +
+      'stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' +
+      '<path d="M8 6h13M3 6h.01M8 12h13M3 12h.01M8 18h13M3 18h.01"></path>' +
+      '</svg>';
+
+    var num = document.createElement('span');
+    num.className = 'fs-num';
+    num.textContent = '#' + fieldIndex;
+
+    var name = document.createElement('div');
+    name.className = 'fs-name';
+    name.setAttribute('contenteditable', 'true');
+    name.setAttribute('spellcheck', 'false');
+    name.setAttribute('data-ph', 'Field ' + fieldIndex);
+    name.textContent = (currentName && typeof currentName === 'string') ? currentName : '';
+
+    // Persist edits (keyed by CURRENT position)
+    name.addEventListener('input', function () {
+      var map = loadNames();
+      var val = name.textContent.trim();
+      if (val) map[fieldIndex] = val;
+      else delete map[fieldIndex];
+      saveNames(map);
+    });
+
+    li.appendChild(handle);
+    li.appendChild(num);
+    li.appendChild(name);
+    return li;
+  }
+
+  // ===== Read names from current DOM order (to keep labels traveling with columns) =====
+  function readNamesFromList() {
+    var out = [];
+    var kids = listEl ? listEl.children : [];
+    for (var i = 0; i < kids.length; i++) {
+      var nmEl = kids[i].querySelector('.fs-name');
+      out.push(nmEl ? (nmEl.textContent || '') : '');
+    }
+    return out; // array by position (0..N-1)
+  }
+
+  // ===== Build list using saved order + names (both are "by position") =====
   function buildList() {
-    const names = loadNames();
-    const N = maxFieldCountAcrossDoc() || 0;
+    var N = maxFieldCountAcrossDoc() || 0;
 
-    // base order [1..N]
-    let base = Array.from({ length: N }, (_, i) => i + 1);
+    // Base order 1..N
+    var identity = [];
+    for (var z = 1; z <= N; z++) identity.push(z);
 
-    // merge with saved order (ignore invalid/out-of-range, append any missing)
-    const saved = loadOrder().filter(n => Number.isInteger(n) && n >= 1 && n <= N);
-    const used  = new Set(saved);
-    const merged = [...saved, ...base.filter(n => !used.has(n))];
+    // Merge saved order (sanitize to 1..N)
+    var savedOrder = loadOrder().filter(function (n) { return Number.isInteger(n) && n >= 1 && n <= N; });
+    var seen = {};
+    var merged = [];
+    for (var i = 0; i < savedOrder.length; i++) {
+      var v = savedOrder[i];
+      if (!seen[v]) { merged.push(v); seen[v] = true; }
+    }
+    for (var j = 0; j < identity.length; j++) {
+      var idv = identity[j];
+      if (!seen[idv]) merged.push(idv);
+    }
+
+    // Names are stored by position (1..N)
+    var names = loadNames();
 
     listEl.innerHTML = '';
-    for (const i of merged) {
-      const li = document.createElement('li');
-      li.className = 'fs-item';
-      li.draggable = true;
-      li.dataset.index = String(i); // 1-based original position
-
-      const handle = document.createElement('span');
-      handle.className = 'fs-handle';
-      handle.innerHTML = `
-        <svg width="18" height="18" viewBox="0 0 24 24" fill="none"
-             stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"
-             aria-hidden="true"><path d="M8 6h13M3 6h.01M8 12h13M3 12h.01M8 18h13M3 18h.01"/></svg>`;
-
-      const num = document.createElement('span');
-      num.className = 'fs-num';
-      num.textContent = `#${i}`;
-
-      const name = document.createElement('div');
-      name.className = 'fs-name';
-      name.contentEditable = 'true';
-      name.spellcheck = false;
-      name.dataset.ph = `Field ${i}`;
-      name.textContent = (names && typeof names[i] === 'string') ? names[i] : '';
-
-      // Persist edits to session only
-      name.addEventListener('input', () => {
-        const map = loadNames();
-        const val = name.textContent.trim();
-        if (val) map[i] = val; else delete map[i];
-        saveNames(map);
-      });
-
-      li.append(handle, num, name);
-      listEl.appendChild(li);
+    for (var k = 0; k < merged.length; k++) {
+      var pos1 = merged[k];                  // which label should be shown in this row
+      var nm   = names[String(pos1)] || '';  // name for that position
+      listEl.appendChild(createRow(pos1, nm));
     }
 
     wireDnD(listEl);
   }
 
-  // ===== Drag & Drop (vanilla) + save order in session =====
+  // ===== DnD =====
   function wireDnD(container) {
-    let dragging = null;
+    var dragging = null;
 
-    container.addEventListener('dragstart', e => {
-      const li = e.target.closest('.fs-item');
+    container.addEventListener('dragstart', function (e) {
+      var li = e.target.closest('.fs-item');
       if (!li) return;
       dragging = li;
       li.classList.add('dragging');
-      e.dataTransfer.effectAllowed = 'move';
-      try { e.dataTransfer.setData('text/plain', li.dataset.index); } catch {}
+      try {
+        e.dataTransfer.effectAllowed = 'move';
+        e.dataTransfer.setData('text/plain', li.getAttribute('data-index') || '');
+      } catch (err) {}
     });
 
-    container.addEventListener('dragend', () => {
+    container.addEventListener('dragend', function () {
       if (dragging) dragging.classList.remove('dragging');
       dragging = null;
-      Array.from(container.children).forEach(ch => ch.classList.remove('drop-before','drop-after'));
-      // Save order after a drag completes
-      saveOrder([...container.children].map(li => Number(li.dataset.index)));
+      var kids = container.children;
+      for (var i = 0; i < kids.length; i++) {
+        kids[i].classList.remove('drop-before', 'drop-after');
+      }
+      // Persist the new order (labels by position)
+      saveOrder(currentOrderFromList());
+      // Also persist names by new positions so labels travel with their row
+      var newNames = readNamesFromList();
+      var map = {};
+      for (var p = 0; p < newNames.length; p++) {
+        var val = (newNames[p] || '').trim();
+        if (val) map[String(p + 1)] = val;
+      }
+      saveNames(map);
     });
 
-    container.addEventListener('dragover', e => {
+    container.addEventListener('dragover', function (e) {
+      var kids, after;
       if (!dragging) return;
       e.preventDefault();
-      const after = getDragAfterElement(container, e.clientY);
-      Array.from(container.children).forEach(ch => ch.classList.remove('drop-before','drop-after'));
+      after = getDragAfterElement(container, e.clientY);
+      kids = container.children;
+      for (var j = 0; j < kids.length; j++) {
+        kids[j].classList.remove('drop-before', 'drop-after');
+      }
       if (!after) {
-        container.lastElementChild?.classList.add('drop-after');
+        if (kids.length) kids[kids.length - 1].classList.add('drop-after');
       } else {
         after.classList.add('drop-before');
       }
     });
 
-    container.addEventListener('drop', e => {
+    container.addEventListener('drop', function (e) {
       if (!dragging) return;
       e.preventDefault();
-      const after = getDragAfterElement(container, e.clientY);
+      var after = getDragAfterElement(container, e.clientY);
       if (!after) container.appendChild(dragging);
       else container.insertBefore(dragging, after);
     });
 
     function getDragAfterElement(container, y) {
-      const els = [...container.querySelectorAll('.fs-item:not(.dragging)')];
-      let closest = null;
-      let closestOffset = Number.NEGATIVE_INFINITY;
-      for (const el of els) {
-        const rect = el.getBoundingClientRect();
-        const offset = y - (rect.top + rect.height / 2);
+      var els = container.querySelectorAll('.fs-item:not(.dragging)');
+      var closest = null;
+      var closestOffset = -Infinity;
+      for (var i = 0; i < els.length; i++) {
+        var el = els[i];
+        var rect = el.getBoundingClientRect();
+        var offset = y - (rect.top + rect.height / 2);
         if (offset < 0 && offset > closestOffset) {
           closestOffset = offset;
           closest = el;
@@ -3029,72 +3087,150 @@ if (mnuClearBoard) {
     }
   }
 
+  function currentOrderFromList() {
+    var order = [];
+    var kids = listEl ? listEl.children : [];
+    for (var i = 0; i < kids.length; i++) {
+      var n = Number(kids[i].getAttribute('data-index') || '0');
+      if (Number.isInteger(n) && n > 0) order.push(n);
+    }
+    return order;
+  }
+
+  // ---- Compute per-tuple permutation safe for varying tuple lengths ----
+  // globalOrder is e.g. [3,1,2,4,5], L is tuple length
+  // Returns a proper permutation of 1..L (no duplicates, all present).
+  function permutationForTuple(globalOrder, L) {
+    var seen = {};
+    var perm = [];
+    for (var i = 0; i < globalOrder.length; i++) {
+      var n = globalOrder[i] | 0;
+      if (n >= 1 && n <= L && !seen[n]) {
+        perm.push(n); seen[n] = true;
+      }
+    }
+    for (var k = 1; k <= L; k++) {
+      if (!seen[k]) perm.push(k);
+    }
+    return perm; // length L
+  }
+
   // ===== Modal open/close =====
   function openModal() {
+    if (!ensureRefs()) {
+      console.warn('[FieldSwapper] Modal elements not found.');
+      return;
+    }
     buildList();
     modal.style.display = 'flex';
-    setTimeout(() => listEl.querySelector('.fs-name')?.focus(), 0);
+    setTimeout(function () {
+      var firstName = listEl.querySelector('.fs-name');
+      if (firstName) firstName.focus();
+    }, 0);
   }
-  function closeModal() { modal.style.display = 'none'; }
+  function closeModal() {
+    if (ensureRefs()) modal.style.display = 'none';
+  }
 
-  // ===== Apply order across whole document (preserves quoted strings/escapes) =====
+  // ===== Apply order across the whole document =====
   function applyOrderToDocument() {
-    const order = [...listEl.children].map(li => Number(li.dataset.index)); // 1-based
-    if (!order.length) { closeModal(); return; }
+    if (!ensureRefs()) return;
 
-    // save current order to session (in case user cancels later and reopens)
-    saveOrder(order);
+    var globalOrder = currentOrderFromList(); // labels-by-position (1..N)
+    if (!globalOrder.length) return;
 
-    const lines = textArea.value.split(/\r?\n/);
-    for (let li = 0; li < lines.length; li++) {
-      let line = lines[li];
-      if (!line.trim()) continue;
+    var lines = textArea.value.split(/\r?\n/);
 
-      const tuples = findTuples(line);
+    for (var li = 0; li < lines.length; li++) {
+      var line = lines[li];
+      if (!line || !line.trim()) continue;
+
+      var tuples = findTuples(line);
       if (!tuples.length) continue;
 
-      let out = line;
-      for (let k = tuples.length - 1; k >= 0; k--) {
-        const cur = findTuples(out)[k]; // refresh tuple indices for current string
-        const before = out.slice(0, cur.open);
-        const after  = out.slice(cur.close);
-        const parts  = splitFields(cur.raw);
+      var out = line;
 
-        // Build reordered tuple: position i takes field #order[i] (1-based)
-        const picked = [];
-        for (let i = 0; i < parts.length; i++) {
-          const src1 = order[i];               // which original field now goes to (i+1)
-          const src0 = (src1 | 0) - 1;         // 0-based
-          picked.push((src0 >= 0 && src0 < parts.length) ? parts[src0] : parts[i]);
+      // Right-to-left replacement keeps indices valid
+      for (var k = tuples.length - 1; k >= 0; k--) {
+        var cur = findTuples(out)[k]; // refresh positions for current string
+        var before = out.slice(0, cur.open);
+        var after  = out.slice(cur.close);
+
+        var parts = splitFields(cur.raw);
+        var L = parts.length;
+
+        // Build a tuple-safe permutation and apply it
+        var perm = permutationForTuple(globalOrder, L);
+        var picked = new Array(L);
+        for (var i = 0; i < L; i++) {
+          var src1 = perm[i];           // which source position should occupy dest i+1
+          picked[i] = parts[src1 - 1];  // safe by construction
         }
 
-        const replaced = joinFields(picked);
-        out = before + replaced + after;
+        out = before + joinFields(picked) + after;
       }
+
       lines[li] = out;
     }
 
     textArea.value = lines.join('\n');
 
-    // integrate with host UI
-    window.pushSnapshot?.();
-    window.updateRowsCountPill?.();
+    if (typeof window.pushSnapshot === 'function') window.pushSnapshot();
+    if (typeof window.updateRowsCountPill === 'function') window.updateRowsCountPill();
 
-    closeModal();
+    // === Idempotency & label consistency for repeated applies ===
+    // 1) Persist names in the CURRENT visual order (so labels travel with their columns)
+    var domNames = readNamesFromList();
+    var namesMap = {};
+    for (var n = 0; n < domNames.length; n++) {
+      var v = (domNames[n] || '').trim();
+      if (v) namesMap[String(n + 1)] = v;
+    }
+    saveNames(namesMap);
+
+    // 2) Reset saved order to identity so clicking "Apply" again without dragging does nothing.
+    var N = maxFieldCountAcrossDoc() || domNames.length;
+    var identity = [];
+    for (var r = 1; r <= N; r++) identity.push(r);
+    saveOrder(identity);
+
+    // 3) Rebuild the list in identity order (same visual names), keep modal open for next swap
+    buildList();
+    var firstName = listEl.querySelector('.fs-name');
+    if (firstName) firstName.focus();
   }
 
-  // ===== Wire controls =====
-  applyBtn?.addEventListener('click', applyOrderToDocument);
-  cancelBtn?.addEventListener('click', closeModal);
-  modal?.addEventListener('click', (e) => { if (e.target === modal) closeModal(); });
+  // ===== Wire buttons once =====
+  function wireButtonsIfNeeded() {
+    if (!ensureRefs()) return;
+    if (!applyBtn._fsBound) {
+      applyBtn.addEventListener('click', applyOrderToDocument);
+      applyBtn._fsBound = true;
+    }
+    if (!cancelBtn._fsBound) {
+      cancelBtn.addEventListener('click', closeModal);
+      cancelBtn._fsBound = true;
+    }
+    if (!modal._fsBound) {
+      modal.addEventListener('click', function (e) { if (e.target === modal) closeModal(); });
+      modal._fsBound = true;
+    }
+  }
 
-  // Menu item (Tools → Field → Swapper)
-  if (mnu) mnu.addEventListener('click', openModal);
+  // ===== Menu item → open modal =====
+  if (menuItem) {
+    menuItem.addEventListener('click', function () {
+      wireButtonsIfNeeded();
+      openModal();
+    });
+  }
 
-  // Also expose a programmatic opener if needed elsewhere
-  window.openFieldSwapper = openModal;
+  // Optional global opener
+  window.openFieldSwapper = function () {
+    wireButtonsIfNeeded();
+    openModal();
+  };
 })();
 </script>
-
 </body>
 </html>
