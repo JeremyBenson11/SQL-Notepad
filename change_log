@@ -1,7 +1,7 @@
 Aug 28th, 2025
 
 * Updated swapper a bit. Still has problems. May need to re-swap.
-* Added Debugger to find improperly escaped apostrophes which stumble the tools.
+* Added Debugger to find improperly escaped apostrophes which stumbles the tools.
 
 Aug 26th, 2025
 
