@@ -1,4 +1,9 @@
-Aug 26th, 2050
+Aug 28th, 2025
+
+* Updated swapper a bit. Still has problems. May need to re-swap.
+* Added Debugger to find improperly escaped apostrophes which stumble the tools.
+
+Aug 26th, 2025
 
 * Fixed bug in swapper. Now using session storage for field names.
 * Added field swapper in Tools -> Field -> Swapper. Can name fields and jumble them into a new order.
