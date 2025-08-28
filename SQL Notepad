@@ -362,6 +362,53 @@ body.interface-hidden textarea#textArea { margin-left: 12px; }
     content: attr(data-ph);
     color: var(--muted);
   }
+  
+    /* Scoped to error-handling only */
+  #error-handling-modal .dialog .title { margin-bottom: 6px; }
+  #error-handling-modal #ehListWrap {
+    border:1px solid var(--border);
+    background: var(--editor);
+    border-radius: 10px;
+    max-height: 360px;
+    overflow:auto;
+    padding: 6px;
+  }
+  #error-handling-modal .eh-list {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+  }
+  #error-handling-modal .eh-item {
+    display: grid;
+    grid-template-columns: auto 1fr auto;
+    align-items: start;
+    gap: 10px;
+    padding: 8px;
+    border-bottom: 1px dashed var(--border);
+  }
+  #error-handling-modal .eh-item:last-child { border-bottom: none; }
+
+  #error-handling-modal .eh-badge {
+    border: 1px solid var(--border);
+    background: var(--pill);
+    border-radius: 999px;
+    padding: 2px 8px;
+    font-size: 12px;
+    line-height: 1.4;
+    white-space: nowrap;
+  }
+  #error-handling-modal .eh-badge.error { color: #fff; background: #b91c1c; border-color:#7f1d1d; }
+  #error-handling-modal .eh-badge.warn  { color: #111; background: #fbbf24; border-color:#b45309; }
+
+  #error-handling-modal .eh-msg {
+    font-size: 14px;
+    line-height: 1.45;
+  }
+  #error-handling-modal .eh-loc {
+    font-size: 12px;
+    color: var(--muted);
+    white-space: nowrap;
+  }
 
 /* Show the safety button when hidden */
 body.interface-hidden #showControlsBtn { display: inline-block; }
@@ -408,6 +455,7 @@ body.interface-hidden #showControlsBtn { display: inline-block; }
 
         <li class="appmenu-sep" aria-hidden="true"></li>
         <li><button id="mnuListExtractor" role="menuitem">List Extractor</button></li>
+		<li><button id="mnuErrorHandling" role="menuitem">Debugging</button></li>
       </ul>
     </li>
 
@@ -635,7 +683,7 @@ line'></textarea>
     <div class="divider"></div>
 
     <!-- Op C: fields X..Y replaced with a string -->
-    <div class="title" style="font-size:14px;margin-bottom:6px;">Fields X to Y replaced with string</div>
+    <div class="title" style="font-size:14px;margin-bottom:6px;">Fields X to Y replaced with string field</div>
     <div class="row">
       <label>From field
         <input type="number" id="sf_span_start" min="1" value="1" style="width:90px;">
@@ -718,7 +766,7 @@ line'></textarea>
       <div class="about-list">
         <ul>
           <li><kbd>Ctrl</kbd>+<kbd>B</kbd> – collect selection to Copy Board (removes it from editor)</li>
-          <li><kbd>Ctrl</kbd>+<kbd>I</kbd> – dump Copy Board items into the n’th field across tuples</li>
+          <li><kbd>Ctrl</kbd>+<kbd>I</kbd> – dump Copy Board items into the n’th field across tuples (field dump)</li>
           <li><kbd>Ctrl</kbd>+<kbd>G</kbd> – insert a unique random token at the caret</li>
           <li><kbd>Ctrl</kbd>+<kbd>D</kbd> – duplicate current line (down). If enabled in <em>Settings</em>, clears the <em>last field</em> on the duplicate</li>
           <li><kbd>Ctrl</kbd>+<kbd>R</kbd> – remove current line, crimping content upward</li>
@@ -738,7 +786,24 @@ line'></textarea>
       </div>
     </div>
   </div>
+<!-- Error Handling Modal -->
+<div class="overlay" id="error-handling-modal" aria-modal="true" role="dialog">
+  <div class="dialog">
+    <div class="title">Error Handling</div>
+    <div class="hint">Scan the current document for errors and warnings. Results are grouped as a scrollable list.</div>
 
+    <div id="ehSummary" class="pill" style="display:inline-block; margin-bottom:8px;">—</div>
+
+    <div id="ehListWrap">
+      <ul id="ehList" class="eh-list" aria-live="polite"></ul>
+    </div>
+
+    <div class="btns" style="margin-top:10px;">
+      <button id="ehRescanBtn" class="secondary">Rescan</button>
+      <button id="ehCloseBtn" class="primary">Close</button>
+    </div>
+  </div>
+</div>
 <script>
 /* ============================
    Persistent UI state (theme, panel, settings)
@@ -2866,371 +2931,526 @@ if (mnuClearBoard) {
   </div>
 </div>
 <script id="field-swapper-plugin">
-(function () {
-  // ===== Session-only persistence (clears when the browser app fully quits) =====
-  var NAMES_KEY = 'sqlFieldDump.fieldNames'; // names keyed by position (1..N) for the CURRENT state
-  var ORDER_KEY = 'sqlFieldDump.fieldOrder'; // list order (1..N)
+(() => {
+  // Session-only persistence (no localStorage)
+  // byArity[n] = { order: number[], labels: string[] }
+  const SWAPPER_STATE = { byArity: Object.create(null), lastArity: 0 };
 
-  // ===== Tuple helpers provided by host app =====
-  var splitFields = window.splitFieldsRobust;
-  var findTuples  = window.findAllTuplesInLineSmart;
-  var joinFields  = window.joinFields;
-
-  if (typeof splitFields !== 'function' || typeof findTuples !== 'function' || typeof joinFields !== 'function') {
-    console.warn('[FieldSwapper] Required tuple helpers missing.');
-    return;
-  }
-
-  var textArea = document.getElementById('textArea');
-  var menuItem = document.getElementById('mnuFieldSwapper');
-
-  // ===== Lazy DOM refs so placement of HTML doesn't matter =====
-  var modal, listEl, applyBtn, cancelBtn;
-  function ensureRefs() {
-    if (!modal)     modal     = document.getElementById('field-swapper-modal');
-    if (!listEl)    listEl    = document.getElementById('fsList');
-    if (!applyBtn)  applyBtn  = document.getElementById('fsApplyBtn');
-    if (!cancelBtn) cancelBtn = document.getElementById('fsCancelBtn');
-    return !!(modal && listEl && applyBtn && cancelBtn && textArea);
-  }
-
-  // ===== sessionStorage helpers =====
-  function loadJSON(key, fallback) {
-    try {
-      var v = sessionStorage.getItem(key);
-      return v ? JSON.parse(v) : fallback;
-    } catch (e) { return fallback; }
-  }
-  function saveJSON(key, val) {
-    try { sessionStorage.setItem(key, JSON.stringify(val)); } catch (e) {}
-  }
-
-  function loadNames() { return loadJSON(NAMES_KEY, {}); }
-  function saveNames(map) { saveJSON(NAMES_KEY, map || {}); }
-  function loadOrder() { return loadJSON(ORDER_KEY, []); }
-  function saveOrder(arr) { saveJSON(ORDER_KEY, arr || []); }
-
-  // ===== Inspect document for max field count =====
-  function maxFieldCountAcrossDoc() {
-    var lines = (textArea.value || '').split(/\r?\n/);
-    var max = 0;
-    for (var i = 0; i < lines.length; i++) {
-      var line = lines[i];
-      if (!line || !line.trim()) continue;
-      var tuples = findTuples(line);
-      for (var t = 0; t < tuples.length; t++) {
-        var parts = splitFields(tuples[t].raw);
-        if (parts.length > max) max = parts.length;
+  // Host helpers already in your app:
+  // textArea, findAllTuplesInLineSmart, splitFieldsRobust, joinFields
+  function firstTupleParts() {
+    const text = textArea.value || '';
+    const lines = text.split(/\r?\n/);
+    for (let i = 0; i < lines.length; i++) {
+      const tuples = findAllTuplesInLineSmart(lines[i]);
+      if (tuples && tuples.length) {
+        const parts = splitFieldsRobust(tuples[0].raw);
+        if (parts && parts.length) return parts;
       }
     }
-    return max;
+    return null;
   }
 
-  // ===== Build one row (no template literals to avoid quoting issues) =====
-  function createRow(fieldIndex, currentName) {
-    var li = document.createElement('li');
-    li.className = 'fs-item';
-    li.draggable = true;
-    li.setAttribute('data-index', String(fieldIndex)); // 1-based label for THIS list position
+  // Universal label
+  const UNIVERSAL_LABEL = 'Field Name';
 
-    var handle = document.createElement('span');
-    handle.className = 'fs-handle';
-    handle.innerHTML =
-      '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" ' +
-      'stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' +
-      '<path d="M8 6h13M3 6h.01M8 12h13M3 12h.01M8 18h13M3 18h.01"></path>' +
-      '</svg>';
+  function defaultLabels(n) {
+    return Array.from({ length: n }, () => UNIVERSAL_LABEL);
+  }
 
-    var num = document.createElement('span');
-    num.className = 'fs-num';
-    num.textContent = '#' + fieldIndex;
-
-    var name = document.createElement('div');
-    name.className = 'fs-name';
-    name.setAttribute('contenteditable', 'true');
-    name.setAttribute('spellcheck', 'false');
-    name.setAttribute('data-ph', 'Field ' + fieldIndex);
-    name.textContent = (currentName && typeof currentName === 'string') ? currentName : '';
-
-    // Persist edits (keyed by CURRENT position)
-    name.addEventListener('input', function () {
-      var map = loadNames();
-      var val = name.textContent.trim();
-      if (val) map[fieldIndex] = val;
-      else delete map[fieldIndex];
-      saveNames(map);
+  // Always coerce blanks to "Field Name"
+  function sanitizeLabels(labels) {
+    return labels.map(v => {
+      const t = (v ?? '').trim();
+      return t || UNIVERSAL_LABEL;
     });
-
-    li.appendChild(handle);
-    li.appendChild(num);
-    li.appendChild(name);
-    return li;
   }
 
-  // ===== Read names from current DOM order (to keep labels traveling with columns) =====
-  function readNamesFromList() {
-    var out = [];
-    var kids = listEl ? listEl.children : [];
-    for (var i = 0; i < kids.length; i++) {
-      var nmEl = kids[i].querySelector('.fs-name');
-      out.push(nmEl ? (nmEl.textContent || '') : '');
-    }
-    return out; // array by position (0..N-1)
+  // Modal hooks (reuse existing HTML/CSS)
+  const modal   = document.getElementById('field-swapper-modal');
+  const menuBtn = document.getElementById('mnuFieldSwapper');
+
+  function getListEl() {
+    return modal ? (modal.querySelector('.fs-list') || modal.querySelector('#fsList')) : null;
+  }
+  function getApplyBtn() {
+    return modal && (
+      modal.querySelector('#fsApplyBtn') ||
+      modal.querySelector('button.apply-order') ||
+      modal.querySelector('[data-action="apply-order"]') ||
+      modal.querySelector('button.primary')
+    );
+  }
+  function getCloseBtn() {
+    return modal && (
+      modal.querySelector('#fsCancelBtn') ||
+      modal.querySelector('[data-action="close"]') ||
+      modal.querySelector('button:not(.primary)')
+    );
+  }
+  function getRestoreBtn() {
+    return modal && (
+      modal.querySelector('#fsRestorePlaceholders') ||
+      modal.querySelector('[data-action="restore-placeholders"]')
+    );
   }
 
-  // ===== Build list using saved order + names (both are "by position") =====
-  function buildList() {
-    var N = maxFieldCountAcrossDoc() || 0;
+  let currentOrder = [];
+  let currentLabels = [];
+  let fieldCount = 0;
 
-    // Base order 1..N
-    var identity = [];
-    for (var z = 1; z <= N; z++) identity.push(z);
-
-    // Merge saved order (sanitize to 1..N)
-    var savedOrder = loadOrder().filter(function (n) { return Number.isInteger(n) && n >= 1 && n <= N; });
-    var seen = {};
-    var merged = [];
-    for (var i = 0; i < savedOrder.length; i++) {
-      var v = savedOrder[i];
-      if (!seen[v]) { merged.push(v); seen[v] = true; }
+  function loadStateFor(n) {
+    fieldCount = n;
+    SWAPPER_STATE.lastArity = n;
+    const s = SWAPPER_STATE.byArity[n];
+    if (s) {
+      currentOrder  = s.order.slice();
+      currentLabels = s.labels.slice();
+    } else {
+      currentOrder  = [...Array(n).keys()];    // mapping: slot -> original index
+      currentLabels = defaultLabels(n);
     }
-    for (var j = 0; j < identity.length; j++) {
-      var idv = identity[j];
-      if (!seen[idv]) merged.push(idv);
-    }
-
-    // Names are stored by position (1..N)
-    var names = loadNames();
-
-    listEl.innerHTML = '';
-    for (var k = 0; k < merged.length; k++) {
-      var pos1 = merged[k];                  // which label should be shown in this row
-      var nm   = names[String(pos1)] || '';  // name for that position
-      listEl.appendChild(createRow(pos1, nm));
-    }
-
-    wireDnD(listEl);
+  }
+  function saveState() {
+    currentLabels = sanitizeLabels(currentLabels);
+    SWAPPER_STATE.byArity[fieldCount] = {
+      order: currentOrder.slice(),
+      labels: currentLabels.slice()
+    };
   }
 
-  // ===== DnD =====
-  function wireDnD(container) {
-    var dragging = null;
-
-    container.addEventListener('dragstart', function (e) {
-      var li = e.target.closest('.fs-item');
-      if (!li) return;
-      dragging = li;
-      li.classList.add('dragging');
-      try {
-        e.dataTransfer.effectAllowed = 'move';
-        e.dataTransfer.setData('text/plain', li.getAttribute('data-index') || '');
-      } catch (err) {}
-    });
-
-    container.addEventListener('dragend', function () {
-      if (dragging) dragging.classList.remove('dragging');
-      dragging = null;
-      var kids = container.children;
-      for (var i = 0; i < kids.length; i++) {
-        kids[i].classList.remove('drop-before', 'drop-after');
+  function relabelDomFromState(list) {
+    currentLabels = sanitizeLabels(currentLabels);
+    const items = Array.from(list.children);
+    items.forEach((li, i) => {
+      const num = li.querySelector('.fs-num');
+      if (num) {
+        // You can keep showing original index or slot number; left as-is
+        // Here we continue to show ORIGINAL index to help users track identity:
+        const origIdx = currentOrder[i] ?? i;
+        num.textContent = String(origIdx + 1);
       }
-      // Persist the new order (labels by position)
-      saveOrder(currentOrderFromList());
-      // Also persist names by new positions so labels travel with their row
-      var newNames = readNamesFromList();
-      var map = {};
-      for (var p = 0; p < newNames.length; p++) {
-        var val = (newNames[p] || '').trim();
-        if (val) map[String(p + 1)] = val;
-      }
-      saveNames(map);
-    });
-
-    container.addEventListener('dragover', function (e) {
-      var kids, after;
-      if (!dragging) return;
-      e.preventDefault();
-      after = getDragAfterElement(container, e.clientY);
-      kids = container.children;
-      for (var j = 0; j < kids.length; j++) {
-        kids[j].classList.remove('drop-before', 'drop-after');
-      }
-      if (!after) {
-        if (kids.length) kids[kids.length - 1].classList.add('drop-after');
-      } else {
-        after.classList.add('drop-before');
+      const nm = li.querySelector('.fs-name');
+      if (nm) {
+        nm.textContent = currentLabels[i] || UNIVERSAL_LABEL;
+        nm.setAttribute('data-ph', UNIVERSAL_LABEL);
       }
     });
-
-    container.addEventListener('drop', function (e) {
-      if (!dragging) return;
-      e.preventDefault();
-      var after = getDragAfterElement(container, e.clientY);
-      if (!after) container.appendChild(dragging);
-      else container.insertBefore(dragging, after);
-    });
-
-    function getDragAfterElement(container, y) {
-      var els = container.querySelectorAll('.fs-item:not(.dragging)');
-      var closest = null;
-      var closestOffset = -Infinity;
-      for (var i = 0; i < els.length; i++) {
-        var el = els[i];
-        var rect = el.getBoundingClientRect();
-        var offset = y - (rect.top + rect.height / 2);
-        if (offset < 0 && offset > closestOffset) {
-          closestOffset = offset;
-          closest = el;
-        }
-      }
-      return closest;
-    }
   }
 
-  function currentOrderFromList() {
-    var order = [];
-    var kids = listEl ? listEl.children : [];
-    for (var i = 0; i < kids.length; i++) {
-      var n = Number(kids[i].getAttribute('data-index') || '0');
-      if (Number.isInteger(n) && n > 0) order.push(n);
-    }
-    return order;
-  }
+  function renderList() {
+    const list = getListEl();
+    if (!list) return;
 
-  // ---- Compute per-tuple permutation safe for varying tuple lengths ----
-  // globalOrder is e.g. [3,1,2,4,5], L is tuple length
-  // Returns a proper permutation of 1..L (no duplicates, all present).
-  function permutationForTuple(globalOrder, L) {
-    var seen = {};
-    var perm = [];
-    for (var i = 0; i < globalOrder.length; i++) {
-      var n = globalOrder[i] | 0;
-      if (n >= 1 && n <= L && !seen[n]) {
-        perm.push(n); seen[n] = true;
-      }
-    }
-    for (var k = 1; k <= L; k++) {
-      if (!seen[k]) perm.push(k);
-    }
-    return perm; // length L
-  }
+    const first = firstTupleParts();
+    list.innerHTML = '';
 
-  // ===== Modal open/close =====
-  function openModal() {
-    if (!ensureRefs()) {
-      console.warn('[FieldSwapper] Modal elements not found.');
+    if (!first || !first.length) {
+      const li = document.createElement('li');
+      li.className = 'fs-item';
+      li.textContent = 'No tuples detected.';
+      list.appendChild(li);
       return;
     }
-    buildList();
-    modal.style.display = 'flex';
-    setTimeout(function () {
-      var firstName = listEl.querySelector('.fs-name');
-      if (firstName) firstName.focus();
-    }, 0);
+
+    const n = first.length;
+    loadStateFor(n);
+    currentLabels = sanitizeLabels(currentLabels);
+
+    for (let i = 0; i < n; i++) {
+      const origIndex = currentOrder[i];
+
+      const li = document.createElement('li');
+      li.className = 'fs-item';
+      li.draggable = true;
+      li.dataset.slotIndex = String(i);
+      li.dataset.origIndex = String(origIndex);
+
+      const h = document.createElement('div');
+      h.className = 'fs-handle';
+      h.setAttribute('aria-hidden', 'true');
+      h.textContent = '≡';
+
+      const num = document.createElement('div');
+      num.className = 'fs-num';
+      num.textContent = String(origIndex + 1); // show original index (optional)
+
+      const nm = document.createElement('div');
+      nm.className = 'fs-name';
+      nm.setAttribute('contenteditable', 'true');
+      nm.setAttribute('data-ph', UNIVERSAL_LABEL);
+      nm.textContent = currentLabels[i] || UNIVERSAL_LABEL;
+
+      nm.addEventListener('blur', () => {
+        let raw = (nm.textContent || '').trim();
+        if (!raw) {
+          nm.textContent = UNIVERSAL_LABEL; // immediately restore to "Field Name"
+          raw = UNIVERSAL_LABEL;
+        }
+        currentLabels[i] = raw;
+        saveState();
+      });
+
+      li.appendChild(h);
+      li.appendChild(num);
+      li.appendChild(nm);
+      list.appendChild(li);
+    }
+
+    initDnD(list);
   }
-  function closeModal() {
-    if (ensureRefs()) modal.style.display = 'none';
+
+  function initDnD(list) {
+    let draggingEl = null;
+
+    list.querySelectorAll('.fs-item').forEach((item) => {
+      item.addEventListener('dragstart', (e) => {
+        draggingEl = item;
+        item.classList.add('dragging');
+        e.dataTransfer.effectAllowed = 'move';
+        try { e.dataTransfer.setData('text/plain', item.dataset.slotIndex || ''); } catch {}
+      });
+
+      item.addEventListener('dragend', () => {
+        if (draggingEl) draggingEl.classList.remove('dragging');
+        draggingEl = null;
+      });
+
+      item.addEventListener('dragover', (e) => {
+        e.preventDefault();
+        if (!draggingEl || draggingEl === item) return;
+        const rect = item.getBoundingClientRect();
+        const before = (e.clientY - rect.top) < (rect.height / 2);
+        item.classList.toggle('drop-before', before);
+        item.classList.toggle('drop-after', !before);
+      });
+
+      item.addEventListener('dragleave', () => {
+        item.classList.remove('drop-before', 'drop-after');
+      });
+
+      item.addEventListener('drop', (e) => {
+        e.preventDefault();
+        item.classList.remove('drop-before', 'drop-after');
+        if (!draggingEl || draggingEl === item) return;
+
+        const children = Array.from(list.children);
+        const from = children.indexOf(draggingEl);
+        const to   = children.indexOf(item);
+
+        const rect = item.getBoundingClientRect();
+        const before = (e.clientY - rect.top) < (rect.height / 2);
+        let insertAt = to + (before ? 0 : 1);
+        if (from < to && !before) insertAt--;
+
+        // DOM move
+        list.removeChild(draggingEl);
+        if (insertAt >= list.children.length) list.appendChild(draggingEl);
+        else list.insertBefore(draggingEl, list.children[insertAt]);
+
+        // State move (keep label with the moved item)
+        const movedOrder  = currentOrder.splice(from, 1)[0];
+        const movedLabel  = currentLabels.splice(from, 1)[0];
+        currentOrder.splice(insertAt, 0, movedOrder);
+        currentLabels.splice(insertAt, 0, movedLabel);
+
+        saveState();
+        // Re-label DOM to keep "Field Name" rule consistent
+        relabelDomFromState(list);
+      });
+    });
   }
 
-  // ===== Apply order across the whole document =====
-  function applyOrderToDocument() {
-    if (!ensureRefs()) return;
+  // Apply: reorder tuples according to currentOrder, preserving values
+  function reorderTupleParts(parts, order) {
+    const out = new Array(parts.length);
+    for (let i = 0; i < parts.length; i++) {
+      const src = order[i];
+      if (src == null || src < 0 || src >= parts.length) return null;
+      out[i] = parts[src];
+    }
+    return out;
+  }
 
-    var globalOrder = currentOrderFromList(); // labels-by-position (1..N)
-    if (!globalOrder.length) return;
+  function applyOrderAcrossDocument() {
+    const first = firstTupleParts();
+    if (!first) return;
 
-    var lines = textArea.value.split(/\r?\n/);
+    const n = first.length;
+    const state = SWAPPER_STATE.byArity[n];
+    if (!state) return;
 
-    for (var li = 0; li < lines.length; li++) {
-      var line = lines[li];
-      if (!line || !line.trim()) continue;
+    const order = state.order.slice();
+    state.labels = sanitizeLabels(state.labels);
 
-      var tuples = findTuples(line);
+    const lines = textArea.value.split(/\r?\n/);
+    for (let li = 0; li < lines.length; li++) {
+      let line = lines[li];
+      if (!line.trim()) continue;
+
+      const tuples = findAllTuplesInLineSmart(line);
       if (!tuples.length) continue;
 
-      var out = line;
+      let newLine = line;
+      for (let k = tuples.length - 1; k >= 0; k--) {
+        const t = tuples[k];
+        const before = newLine.slice(0, t.open);
+        const raw    = newLine.slice(t.open, t.close);
+        const after  = newLine.slice(t.close);
 
-      // Right-to-left replacement keeps indices valid
-      for (var k = tuples.length - 1; k >= 0; k--) {
-        var cur = findTuples(out)[k]; // refresh positions for current string
-        var before = out.slice(0, cur.open);
-        var after  = out.slice(cur.close);
+        const parts = splitFieldsRobust(raw);
+        if (!parts || parts.length !== n) continue;
 
-        var parts = splitFields(cur.raw);
-        var L = parts.length;
+        const reordered = reorderTupleParts(parts, order);
+        if (!reordered) continue;
 
-        // Build a tuple-safe permutation and apply it
-        var perm = permutationForTuple(globalOrder, L);
-        var picked = new Array(L);
-        for (var i = 0; i < L; i++) {
-          var src1 = perm[i];           // which source position should occupy dest i+1
-          picked[i] = parts[src1 - 1];  // safe by construction
-        }
-
-        out = before + joinFields(picked) + after;
+        newLine = before + joinFields(reordered) + after;
       }
-
-      lines[li] = out;
+      lines[li] = newLine;
     }
 
     textArea.value = lines.join('\n');
-
-    if (typeof window.pushSnapshot === 'function') window.pushSnapshot();
-    if (typeof window.updateRowsCountPill === 'function') window.updateRowsCountPill();
-
-    // === Idempotency & label consistency for repeated applies ===
-    // 1) Persist names in the CURRENT visual order (so labels travel with their columns)
-    var domNames = readNamesFromList();
-    var namesMap = {};
-    for (var n = 0; n < domNames.length; n++) {
-      var v = (domNames[n] || '').trim();
-      if (v) namesMap[String(n + 1)] = v;
-    }
-    saveNames(namesMap);
-
-    // 2) Reset saved order to identity so clicking "Apply" again without dragging does nothing.
-    var N = maxFieldCountAcrossDoc() || domNames.length;
-    var identity = [];
-    for (var r = 1; r <= N; r++) identity.push(r);
-    saveOrder(identity);
-
-    // 3) Rebuild the list in identity order (same visual names), keep modal open for next swap
-    buildList();
-    var firstName = listEl.querySelector('.fs-name');
-    if (firstName) firstName.focus();
+    try { pushSnapshot && pushSnapshot(); } catch {}
+    try { updateRowsCountPill && updateRowsCountPill(); } catch {}
   }
 
-  // ===== Wire buttons once =====
-  function wireButtonsIfNeeded() {
-    if (!ensureRefs()) return;
-    if (!applyBtn._fsBound) {
-      applyBtn.addEventListener('click', applyOrderToDocument);
-      applyBtn._fsBound = true;
-    }
-    if (!cancelBtn._fsBound) {
-      cancelBtn.addEventListener('click', closeModal);
-      cancelBtn._fsBound = true;
-    }
-    if (!modal._fsBound) {
-      modal.addEventListener('click', function (e) { if (e.target === modal) closeModal(); });
-      modal._fsBound = true;
-    }
-  }
+  // Open / Close & Buttons
+  function openModal() { if (!modal) return; renderList(); modal.style.display = 'flex'; }
+  function closeModal(){ if (!modal) return; modal.style.display = 'none'; }
 
-  // ===== Menu item → open modal =====
-  if (menuItem) {
-    menuItem.addEventListener('click', function () {
-      wireButtonsIfNeeded();
-      openModal();
+  if (menuBtn) menuBtn.addEventListener('click', openModal);
+
+  if (modal) {
+    modal.addEventListener('click', (e) => { if (e.target === modal) closeModal(); });
+
+    const applyBtn = getApplyBtn();
+    if (applyBtn) applyBtn.addEventListener('click', () => { applyOrderAcrossDocument(); closeModal(); });
+
+    const closeBtn = getCloseBtn();
+    if (closeBtn) closeBtn.addEventListener('click', closeModal);
+
+    const restoreBtn = getRestoreBtn();
+    if (restoreBtn) restoreBtn.addEventListener('click', () => {
+      // Reset every label to "Field Name"
+      const list = getListEl();
+      if (!list) return;
+      currentLabels = defaultLabels(currentLabels.length);
+      saveState();
+      relabelDomFromState(list);
     });
+
+    modal.addEventListener('keydown', (e) => { if (e.key === 'Escape') closeModal(); });
+  }
+})();
+</script>
+<script id="error-handling-plugin">
+document.addEventListener('DOMContentLoaded', () => {
+  // ===== DOM =====
+  const textArea = document.getElementById('textArea');
+  const mnuErrorHandling = document.getElementById('mnuErrorHandling');
+  const modal = document.getElementById('error-handling-modal');
+  const ehList = document.getElementById('ehList');
+  const ehSummary = document.getElementById('ehSummary');
+  const ehRescanBtn = document.getElementById('ehRescanBtn');
+  const ehCloseBtn = document.getElementById('ehCloseBtn');
+
+  // ===== Modal helpers =====
+  const openEHModal = () => {
+    if (!modal) return;
+    modal.style.display = 'flex';
+    scanAndRender();
+  };
+  const closeEHModal = () => { if (modal) modal.style.display = 'none'; };
+
+  modal?.addEventListener('click', (e) => { if (e.target === modal) closeEHModal(); });
+  ehCloseBtn?.addEventListener('click', closeEHModal);
+  ehRescanBtn?.addEventListener('click', scanAndRender);
+  mnuErrorHandling?.addEventListener('click', openEHModal);
+  document.addEventListener('keydown', (e) => {
+    if (e.ctrlKey && e.shiftKey && (e.key === 'E' || e.key === 'e')) { e.preventDefault(); openEHModal(); }
+  });
+
+  // ===== Utilities =====
+  const normalize = (s) => (s || '').replace(/\r\n?/g, '\n');
+  const isQuoted = (s) => s.length >= 2 && s.startsWith("'") && s.endsWith("'");
+  const isEmptyQuotedField = (field) => isQuoted(field) && /^\s*$/.test(field.slice(1, -1));
+
+  // Robust tuple content extractor: returns string inside the FIRST (...) on the line, respecting quotes/escapes.
+  function extractTupleSegment(line) {
+    const start = line.indexOf('(');
+    if (start === -1) return null;
+    let i = start + 1, inQ = false, esc = false, depth = 1;
+    while (i < line.length) {
+      const ch = line[i];
+      if (esc) { esc = false; i++; continue; }
+      if (ch === '\\') { esc = true; i++; continue; }
+      if (ch === "'") { inQ = !inQ; i++; continue; }
+      if (!inQ) {
+        if (ch === '(') depth++;
+        else if (ch === ')') {
+          depth--;
+          if (depth === 0) return line.slice(start + 1, i); // inside parens
+        }
+      }
+      i++;
+    }
+    return null; // unbalanced
   }
 
-  // Optional global opener
-  window.openFieldSwapper = function () {
-    wireButtonsIfNeeded();
-    openModal();
-  };
-})();
+  // Field splitter that respects quoted strings and backslash escapes.
+  function splitFieldsRobust(tupleRaw) {
+    const out = [];
+    let buf = '', inQ = false, esc = false;
+    for (let i = 0; i < tupleRaw.length; i++) {
+      const ch = tupleRaw[i];
+      if (esc) { buf += ch; esc = false; continue; }
+      if (ch === '\\') { buf += ch; esc = true; continue; }
+      if (ch === "'") { buf += ch; inQ = !inQ; continue; }
+      if (!inQ && ch === ',') { out.push(buf.trim()); buf = ''; continue; }
+      buf += ch;
+    }
+    out.push(buf.trim());
+    return out;
+  }
+
+  // Quote balance check on a tuple string (counts unescaped single quotes).
+  function hasUnmatchedQuote(tupleRaw) {
+    let count = 0, esc = false;
+    for (let i = 0; i < tupleRaw.length; i++) {
+      const ch = tupleRaw[i];
+      if (esc) { esc = false; continue; }
+      if (ch === '\\') { esc = true; continue; }
+      if (ch === "'") count++;
+    }
+    return (count % 2) === 1;
+  }
+
+  // Pass A (raw): scan each line for patterns regardless of tuple parsing
+  function scanRawLine(line, setIdx, rowIdx, issues) {
+    // Wrong slash before apostrophe: /'
+    // Use a state machine so we only count it when it occurs INSIDE quotes
+    let inQ = false, esc = false;
+    for (let i = 0; i < line.length - 1; i++) {
+      const ch = line[i];
+      if (esc) { esc = false; continue; }
+      if (ch === '\\') { esc = true; continue; }
+      if (ch === "'") { inQ = !inQ; continue; }
+      if (inQ && ch === '/' && line[i + 1] === "'") {
+        issues.push({ kind: 'error', msg: `Wrong escape before apostrophe (found "/'").`, setIdx, rowIdx });
+      }
+    }
+    // Too many backslashes before apostrophe: \\' (2+)
+    // Again, only inside quotes
+    inQ = false; esc = false;
+    for (let i = 0; i < line.length; i++) {
+      const ch = line[i];
+      if (esc) { esc = false; continue; }
+      if (ch === '\\') { esc = true; continue; }
+      if (ch === "'") { inQ = !inQ; continue; }
+      if (inQ && ch === '\\') {
+        let j = i;
+        while (j < line.length && line[j] === '\\') j++;
+        if (line[j] === "'" && (j - i) >= 2) {
+          issues.push({ kind: 'warn', msg: `Apostrophe escaped with multiple backslashes (e.g., "\\\\'").`, setIdx, rowIdx });
+        }
+        i = j - 1;
+      }
+    }
+  }
+
+  // Pass B (tuple-aware): field count mismatch, unmatched quote, empty end field, lone-quote field
+  function scanTupleLine(line, setIdx, rowIdx, expectedRef, issues) {
+    const tSeg = extractTupleSegment(line);
+    if (tSeg == null) return;
+
+    const fields = splitFieldsRobust(tSeg);
+    if (expectedRef.expected == null) expectedRef.expected = fields.length;
+
+    if (fields.length !== expectedRef.expected) {
+      issues.push({ kind: 'error', msg: `Field count mismatch: expected ${expectedRef.expected}, got ${fields.length}.`, setIdx, rowIdx });
+    }
+    if (hasUnmatchedQuote(tSeg)) {
+      issues.push({ kind: 'error', msg: `Unmatched single quote detected in tuple.`, setIdx, rowIdx });
+    }
+
+    // Field-level warnings
+    fields.forEach((f) => {
+      if (f.trim() === `'`) {
+        issues.push({ kind: 'warn', msg: `Single quote without a value in a field.`, setIdx, rowIdx });
+      }
+    });
+
+    // Empty last field warning
+    const lastField = fields[fields.length - 1] ?? '';
+    if (isEmptyQuotedField(lastField)) {
+      issues.push({ kind: 'warn', msg: `Empty end field string (last field is empty quotes).`, setIdx, rowIdx });
+    }
+  }
+
+  function scanDocument(src) {
+    const issues = [];
+    const sets = normalize(src).split(/\n{2,}/); // sets (blank line separated)
+    sets.forEach((block, sIdx0) => {
+      const lines = block.split('\n');
+      const expectedRef = { expected: null };
+      lines.forEach((line, rIdx0) => {
+        const setIdx = sIdx0 + 1;
+        const rowIdx = rIdx0 + 1;
+
+        // Always run raw line pass so wrong-slash shows up even if parsing breaks
+        scanRawLine(line, setIdx, rowIdx, issues);
+
+        // Then run tuple-aware checks
+        scanTupleLine(line, setIdx, rowIdx, expectedRef, issues);
+      });
+    });
+    return issues;
+  }
+
+  // ===== Render =====
+  function renderIssues(issues) {
+    ehList.innerHTML = '';
+    let e = 0, w = 0;
+    for (const it of issues) {
+      if (it.kind === 'error') e++; else w++;
+
+      const li = document.createElement('li');
+      li.className = 'eh-item';
+
+      const badge = document.createElement('span');
+      badge.className = `eh-badge ${it.kind === 'error' ? 'error' : 'warn'}`;
+      badge.textContent = it.kind === 'error' ? 'Error' : 'Warning';
+
+      const msg = document.createElement('div');
+      msg.className = 'eh-msg';
+      msg.textContent = it.msg;
+
+      const loc = document.createElement('div');
+      loc.className = 'eh-loc';
+      loc.textContent = `Set ${it.setIdx} · Row ${it.rowIdx}`;
+
+      li.appendChild(badge);
+      li.appendChild(msg);
+      li.appendChild(loc);
+      ehList.appendChild(li);
+    }
+    ehSummary.textContent = (e + w === 0) ? 'No issues found' : `${e} error${e!==1?'s':''}, ${w} warning${w!==1?'s':''}`;
+    // Console diag
+    console.log(`[EH] scan: ${e} errors, ${w} warnings, ${issues.length} total`);
+  }
+
+  function scanAndRender() {
+    const src = textArea?.value || '';
+    const issues = scanDocument(src);
+    renderIssues(issues);
+  }
+
+  // Expose minimal debug
+  window.__EH = { scanAndRender, scanDocument, extractTupleSegment, splitFieldsRobust };
+
+  // --- OPTIONAL: Auto-open for quick verification ---
+  // openEHModal();
+});
 </script>
 </body>
 </html>
