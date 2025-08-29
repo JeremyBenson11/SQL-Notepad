@@ -1,3 +1,9 @@
+Aug 29th, 2025
+
+* Added new tool. Tools -> Field -> Append/Prepend. Append prepend field to field or string to field.
+* Initially wrong about error handling. It will catch three errors and zero warnings. Will find missmatched field count, missing end token, and a poorly escaped apostrophe using '/.' Field count uses a sample, so the error may be elsewhere. End field may be blank, not intending a token.
+* Removed Crtl+Shift+E from launching Debugging window. Now launched by Ctrl+Shift+U.
+
 Aug 28th, 2025
 
 * Updated swapper a bit. Still has problems. May need to re-swap.
