@@ -410,6 +410,17 @@ body.interface-hidden textarea#textArea { margin-left: 12px; }
     white-space: nowrap;
   }
 
+/* Append/Prepend (scoped) */
+#append-prepend-modal .title { margin-bottom: 6px; }
+#append-prepend-modal .hint { margin-bottom: 8px; }
+#append-prepend-modal input[type="number"],
+#append-prepend-modal input[type="text"],
+#append-prepend-modal select {
+  padding: 8px; border-radius: 8px; border: 1px solid var(--border);
+  background: var(--editor); color: var(--fg);
+}
+
+
 /* Show the safety button when hidden */
 body.interface-hidden #showControlsBtn { display: inline-block; }
 
@@ -450,6 +461,7 @@ body.interface-hidden #showControlsBtn { display: inline-block; }
             <li><button id="mnuFieldRemove" role="menuitem">Remove Field</button></li>
             <li><button id="mnuFieldSet"    role="menuitem">Set Field</button></li>
 			<li><button id="mnuFieldSwapper" role="menuitem">Swapper</button></li>
+			<li><button id="mnuFieldAppendPrepend" role="menuitem">Append/Prepend</button></li>
           </ul>
         </li>
 
@@ -772,6 +784,7 @@ line'></textarea>
           <li><kbd>Ctrl</kbd>+<kbd>R</kbd> – remove current line, crimping content upward</li>
           <li><kbd>Ctrl</kbd>+<kbd>Z</kbd>/<kbd>Ctrl</kbd>+<kbd>Y</kbd> – undo/redo snapshots (10-depth ring)</li>
 		  <li><kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>E</kbd> – Open duplicate token report</li>
+		   <li><kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>U</kbd> – Open debugging report</li>
 		  <li><kbd>Ctrl</kbd>+<kbd>S</kbd> – toggle interface visibility (safety button also available)</li>
           <li><kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>V</kbd> – import clipboard into Copy Board</li>
           <li><b>Tokenizer</b> – fills only empty last fields (<code>''</code> or <code>' '</code>) with unique tokens; optionally replace <em>all</em> last fields via <em>Settings</em></li>
@@ -3267,7 +3280,7 @@ document.addEventListener('DOMContentLoaded', () => {
   ehRescanBtn?.addEventListener('click', scanAndRender);
   mnuErrorHandling?.addEventListener('click', openEHModal);
   document.addEventListener('keydown', (e) => {
-    if (e.ctrlKey && e.shiftKey && (e.key === 'E' || e.key === 'e')) { e.preventDefault(); openEHModal(); }
+    if (e.ctrlKey && e.shiftKey && (e.key === 'U' || e.key === 'u')) { e.preventDefault(); openEHModal(); }
   });
 
   // ===== Utilities =====
@@ -3452,5 +3465,223 @@ document.addEventListener('DOMContentLoaded', () => {
   // openEHModal();
 });
 </script>
+<script id="append-prepend-plugin">
+/*
+  Append/Prepend Plugin (raw-preserving)
+  - Opens from Tools → Field → Append/Prepend (button id: mnuFieldAppendPrepend)
+  - Modal id: append-prepend-modal
+  - Preserves user input exactly — NO extra escaping or quote transforms.
+  - Depends on host helpers already in your app:
+      - textArea
+      - findAllTuplesInLineSmart(line)
+      - splitFieldsRobust(tupleRaw)
+      - joinFields(parts)
+      - isEmptyQuotedField(str)         (optional; we also do our own empty check)
+*/
+
+document.addEventListener('DOMContentLoaded', () => {
+  // --- Quick accessors ---
+  const get = (id) => document.getElementById(id);
+
+  // --- Quote helpers: preserve raw content exactly ---
+  function isQuotedPart(part) {
+    const t = String(part).trim();
+    return t.startsWith("'") && t.endsWith("'");
+  }
+  function rawInner(part) {
+    // Returns the raw text between the FIRST and LAST single quote—no un/escaping
+    const t = String(part).trim();
+    return t.slice(1, -1);
+  }
+
+  // Empty detection that respects the user's raw content
+  function partIsEmpty(part) {
+    const t = String(part).trim();
+    if (t.length === 0) return true;
+    if (isQuotedPart(t)) {
+      const inner = rawInner(t);
+      return inner.trim().length === 0;
+    }
+    // Unquoted non-empty chars count as non-empty
+    return false;
+  }
+
+  // Concatenate while preserving target's quoting style and raw characters
+  function concatPreservingTarget(targetPart, addStr, op /* 'append' | 'prepend' */) {
+    const t = String(targetPart);
+    if (isQuotedPart(t)) {
+      const inner = rawInner(t); // raw between quotes
+      const newInner = (op === 'prepend') ? (addStr + inner) : (inner + addStr);
+      return "'" + newInner + "'"; // re-wrap in single quotes, keep content as-is
+    } else {
+      const base = t.trim();
+      return (op === 'prepend') ? (addStr + base) : (base + addStr);
+    }
+  }
+
+  // Apply a tuple-modifier across the entire document
+  function applyAcrossDocument(modifier) {
+    const ta = get('textArea');
+    if (!ta) return;
+
+    const lines = ta.value.split(/\r?\n/);
+    let changed = false;
+
+    for (let i = 0; i < lines.length; i++) {
+      const tuples = findAllTuplesInLineSmart(lines[i]);
+      if (!tuples.length) continue;
+
+      let out = lines[i];
+
+      // Replace from the end to keep indices stable
+      for (let k = tuples.length - 1; k >= 0; k--) {
+        const t = tuples[k];
+        const before = out.slice(0, t.open);
+        const after  = out.slice(t.close);
+        const parts  = splitFieldsRobust(t.raw);
+
+        const updated = modifier(parts);
+        if (updated) {
+          out = before + joinFields(updated) + after;
+          changed = true;
+        }
+      }
+      lines[i] = out;
+    }
+
+    if (changed) {
+      const prevStart = ta.selectionStart, prevEnd = ta.selectionEnd;
+      ta.value = lines.join('\n');
+      // Try to preserve caret/selection
+      ta.setSelectionRange(prevStart, prevEnd);
+      // If host has snapshotting, record it
+      if (typeof window.pushSnapshot === 'function') {
+        window.pushSnapshot();
+      }
+      if (typeof window.updateRowsCountPill === 'function') {
+        window.updateRowsCountPill();
+      }
+    }
+  }
+
+  // ===== Field mode: Target = Target [Append/Prepend] × Field =====
+  function runFieldMode() {
+    const tgt1 = Number(get('ap_target_field_f')?.value ?? 1);
+    const src1 = Number(get('ap_source_field')?.value ?? 2);
+    const op   = get('ap_op_f')?.value || 'append';
+
+    if (!Number.isInteger(tgt1) || tgt1 < 1) { alert('Target field must be an integer ≥ 1.'); return; }
+    if (!Number.isInteger(src1) || src1 < 1) { alert('Source field must be an integer ≥ 1.'); return; }
+
+    applyAcrossDocument((parts) => {
+      const tgt0 = tgt1 - 1;
+      const src0 = src1 - 1;
+      if (tgt0 >= parts.length || src0 >= parts.length) return null;
+
+      const targetPart = parts[tgt0];
+      const sourcePart = parts[src0];
+
+      // "If field is empty do nothing."
+      if (partIsEmpty(sourcePart) || (typeof isEmptyQuotedField === 'function' && isEmptyQuotedField(sourcePart))) return null;
+
+      const addStr = isQuotedPart(sourcePart) ? rawInner(sourcePart) : String(sourcePart).trim();
+      parts[tgt0] = concatPreservingTarget(targetPart, addStr, op);
+      return parts;
+    });
+  }
+
+  // ===== String mode: Target = Target [Append/Prepend] × String =====
+  function runStringMode() {
+    const tgt1 = Number(get('ap_target_field_s')?.value ?? 1);
+    const op   = get('ap_op_s')?.value || 'append';
+    const sRaw = get('ap_string_input')?.value ?? '';
+
+    if (!Number.isInteger(tgt1) || tgt1 < 1) { alert('Target field must be an integer ≥ 1.'); return; }
+    // "When input is empty do nothing."
+    if (sRaw.length === 0) return;
+
+    applyAcrossDocument((parts) => {
+      const tgt0 = tgt1 - 1;
+      if (tgt0 >= parts.length) return null;
+
+      parts[tgt0] = concatPreservingTarget(parts[tgt0], sRaw, op);
+      return parts;
+    });
+  }
+
+  // ===== Modal wiring (open/close + buttons) =====
+  function openModal() {
+    const modal = get('append-prepend-modal');
+    if (!modal) return;
+    modal.style.display = 'flex';
+  }
+  function closeModal() {
+    const modal = get('append-prepend-modal');
+    if (!modal) return;
+    modal.style.display = 'none';
+  }
+
+  // Bind menu and modal buttons
+  get('mnuFieldAppendPrepend')?.addEventListener('click', openModal);
+  get('ap_apply_field')?.addEventListener('click', runFieldMode);
+  get('ap_apply_string')?.addEventListener('click', runStringMode);
+  get('ap_close_btn')?.addEventListener('click', closeModal);
+
+  // Click backdrop to close
+  get('append-prepend-modal')?.addEventListener('click', (e) => {
+    if (e.target === e.currentTarget) closeModal();
+  });
+});
+</script>
+<!-- Append/Prepend Modal -->
+<div class="overlay" id="append-prepend-modal" aria-modal="true" role="dialog">
+  <div class="dialog">
+    <div class="title">Append / Prepend</div>
+    <div class="hint">Operate across the entire document. If the chosen source/string is empty, that tuple is skipped.</div>
+
+    <!-- A) Target = Target [Append/Prepend] × Field -->
+    <div class="title" style="font-size:14px;margin:8px 0 6px;">A) Target field ⟵ target [Append/Prepend] × field</div>
+    <div class="row">
+      <label>Target field
+        <input type="number" id="ap_target_field_f" min="1" value="1" style="width:90px;">
+      </label>
+      <label>Operation
+        <select id="ap_op_f">
+          <option value="append">Append</option>
+          <option value="prepend">Prepend</option>
+        </select>
+      </label>
+      <label>× Field
+        <input type="number" id="ap_source_field" min="1" value="2" style="width:90px;">
+      </label>
+    </div>
+    <div class="btns">
+      <button id="ap_apply_field" class="primary">Apply Field → Target</button>
+    </div>
+
+    <div class="divider"></div>
+
+    <!-- B) Target = Target [Append/Prepend] × String -->
+    <div class="title" style="font-size:14px;margin:8px 0 6px;">B) Target field ⟵ target [Append/Prepend] × string</div>
+    <div class="row">
+      <label>Target field
+        <input type="number" id="ap_target_field_s" min="1" value="1" style="width:90px;">
+      </label>
+      <label>Operation
+        <select id="ap_op_s">
+          <option value="append">Append</option>
+          <option value="prepend">Prepend</option>
+        </select>
+      </label>
+      <label>× String
+        <input type="text" id="ap_string_input" placeholder="leave empty to skip">
+      </label>
+    </div>
+    <div class="btns">
+      <button id="ap_apply_string" class="primary">Apply String → Target</button>
+      <button id="ap_close_btn">Close</button>
+    </div>
+  </div>
+</div>
 </body>
 </html>
