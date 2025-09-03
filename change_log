@@ -1,3 +1,8 @@
+Sep 3rd, 2025
+
+* Created new tool at Tools -> Template Maker. Template maker will turn the set of rows in the document into a working template. Every item in the Copy Board will become a new copy with Copy Board item at n't field. The finished sets will be appended to the document.
+* Totally broke debugging. Not sure if repair is coming any time soon.
+
 Aug 29th, 2025
 
 * Added new tool. Tools -> Field -> Append/Prepend. Append prepend field to field or string to field.
