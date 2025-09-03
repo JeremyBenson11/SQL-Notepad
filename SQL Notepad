@@ -3260,215 +3260,6 @@ if (mnuClearBoard) {
   }
 })();
 </script>
-<script id="error-handling-plugin">
-document.addEventListener('DOMContentLoaded', () => {
-  // ===== DOM =====
-  const textArea = document.getElementById('textArea');
-  const mnuErrorHandling = document.getElementById('mnuErrorHandling');
-  const modal = document.getElementById('error-handling-modal');
-  const ehList = document.getElementById('ehList');
-  const ehSummary = document.getElementById('ehSummary');
-  const ehRescanBtn = document.getElementById('ehRescanBtn');
-  const ehCloseBtn = document.getElementById('ehCloseBtn');
-
-  // ===== Modal helpers =====
-  const openEHModal = () => {
-    if (!modal) return;
-    modal.style.display = 'flex';
-    scanAndRender();
-  };
-  const closeEHModal = () => { if (modal) modal.style.display = 'none'; };
-
-  modal?.addEventListener('click', (e) => { if (e.target === modal) closeEHModal(); });
-  ehCloseBtn?.addEventListener('click', closeEHModal);
-  ehRescanBtn?.addEventListener('click', scanAndRender);
-  mnuErrorHandling?.addEventListener('click', openEHModal);
-  document.addEventListener('keydown', (e) => {
-    if (e.ctrlKey && e.shiftKey && (e.key === 'U' || e.key === 'u')) { e.preventDefault(); openEHModal(); }
-  });
-
-  // ===== Utilities =====
-  const normalize = (s) => (s || '').replace(/\r\n?/g, '\n');
-  const isQuoted = (s) => s.length >= 2 && s.startsWith("'") && s.endsWith("'");
-  const isEmptyQuotedField = (field) => isQuoted(field) && /^\s*$/.test(field.slice(1, -1));
-
-  // Robust tuple content extractor: returns string inside the FIRST (...) on the line, respecting quotes/escapes.
-  function extractTupleSegment(line) {
-    const start = line.indexOf('(');
-    if (start === -1) return null;
-    let i = start + 1, inQ = false, esc = false, depth = 1;
-    while (i < line.length) {
-      const ch = line[i];
-      if (esc) { esc = false; i++; continue; }
-      if (ch === '\\') { esc = true; i++; continue; }
-      if (ch === "'") { inQ = !inQ; i++; continue; }
-      if (!inQ) {
-        if (ch === '(') depth++;
-        else if (ch === ')') {
-          depth--;
-          if (depth === 0) return line.slice(start + 1, i); // inside parens
-        }
-      }
-      i++;
-    }
-    return null; // unbalanced
-  }
-
-  // Field splitter that respects quoted strings and backslash escapes.
-  function splitFieldsRobust(tupleRaw) {
-    const out = [];
-    let buf = '', inQ = false, esc = false;
-    for (let i = 0; i < tupleRaw.length; i++) {
-      const ch = tupleRaw[i];
-      if (esc) { buf += ch; esc = false; continue; }
-      if (ch === '\\') { buf += ch; esc = true; continue; }
-      if (ch === "'") { buf += ch; inQ = !inQ; continue; }
-      if (!inQ && ch === ',') { out.push(buf.trim()); buf = ''; continue; }
-      buf += ch;
-    }
-    out.push(buf.trim());
-    return out;
-  }
-
-  // Quote balance check on a tuple string (counts unescaped single quotes).
-  function hasUnmatchedQuote(tupleRaw) {
-    let count = 0, esc = false;
-    for (let i = 0; i < tupleRaw.length; i++) {
-      const ch = tupleRaw[i];
-      if (esc) { esc = false; continue; }
-      if (ch === '\\') { esc = true; continue; }
-      if (ch === "'") count++;
-    }
-    return (count % 2) === 1;
-  }
-
-  // Pass A (raw): scan each line for patterns regardless of tuple parsing
-  function scanRawLine(line, setIdx, rowIdx, issues) {
-    // Wrong slash before apostrophe: /'
-    // Use a state machine so we only count it when it occurs INSIDE quotes
-    let inQ = false, esc = false;
-    for (let i = 0; i < line.length - 1; i++) {
-      const ch = line[i];
-      if (esc) { esc = false; continue; }
-      if (ch === '\\') { esc = true; continue; }
-      if (ch === "'") { inQ = !inQ; continue; }
-      if (inQ && ch === '/' && line[i + 1] === "'") {
-        issues.push({ kind: 'error', msg: `Wrong escape before apostrophe (found "/'").`, setIdx, rowIdx });
-      }
-    }
-    // Too many backslashes before apostrophe: \\' (2+)
-    // Again, only inside quotes
-    inQ = false; esc = false;
-    for (let i = 0; i < line.length; i++) {
-      const ch = line[i];
-      if (esc) { esc = false; continue; }
-      if (ch === '\\') { esc = true; continue; }
-      if (ch === "'") { inQ = !inQ; continue; }
-      if (inQ && ch === '\\') {
-        let j = i;
-        while (j < line.length && line[j] === '\\') j++;
-        if (line[j] === "'" && (j - i) >= 2) {
-          issues.push({ kind: 'warn', msg: `Apostrophe escaped with multiple backslashes (e.g., "\\\\'").`, setIdx, rowIdx });
-        }
-        i = j - 1;
-      }
-    }
-  }
-
-  // Pass B (tuple-aware): field count mismatch, unmatched quote, empty end field, lone-quote field
-  function scanTupleLine(line, setIdx, rowIdx, expectedRef, issues) {
-    const tSeg = extractTupleSegment(line);
-    if (tSeg == null) return;
-
-    const fields = splitFieldsRobust(tSeg);
-    if (expectedRef.expected == null) expectedRef.expected = fields.length;
-
-    if (fields.length !== expectedRef.expected) {
-      issues.push({ kind: 'error', msg: `Field count mismatch: expected ${expectedRef.expected}, got ${fields.length}.`, setIdx, rowIdx });
-    }
-    if (hasUnmatchedQuote(tSeg)) {
-      issues.push({ kind: 'error', msg: `Unmatched single quote detected in tuple.`, setIdx, rowIdx });
-    }
-
-    // Field-level warnings
-    fields.forEach((f) => {
-      if (f.trim() === `'`) {
-        issues.push({ kind: 'warn', msg: `Single quote without a value in a field.`, setIdx, rowIdx });
-      }
-    });
-
-    // Empty last field warning
-    const lastField = fields[fields.length - 1] ?? '';
-    if (isEmptyQuotedField(lastField)) {
-      issues.push({ kind: 'warn', msg: `Empty end field string (last field is empty quotes).`, setIdx, rowIdx });
-    }
-  }
-
-  function scanDocument(src) {
-    const issues = [];
-    const sets = normalize(src).split(/\n{2,}/); // sets (blank line separated)
-    sets.forEach((block, sIdx0) => {
-      const lines = block.split('\n');
-      const expectedRef = { expected: null };
-      lines.forEach((line, rIdx0) => {
-        const setIdx = sIdx0 + 1;
-        const rowIdx = rIdx0 + 1;
-
-        // Always run raw line pass so wrong-slash shows up even if parsing breaks
-        scanRawLine(line, setIdx, rowIdx, issues);
-
-        // Then run tuple-aware checks
-        scanTupleLine(line, setIdx, rowIdx, expectedRef, issues);
-      });
-    });
-    return issues;
-  }
-
-  // ===== Render =====
-  function renderIssues(issues) {
-    ehList.innerHTML = '';
-    let e = 0, w = 0;
-    for (const it of issues) {
-      if (it.kind === 'error') e++; else w++;
-
-      const li = document.createElement('li');
-      li.className = 'eh-item';
-
-      const badge = document.createElement('span');
-      badge.className = `eh-badge ${it.kind === 'error' ? 'error' : 'warn'}`;
-      badge.textContent = it.kind === 'error' ? 'Error' : 'Warning';
-
-      const msg = document.createElement('div');
-      msg.className = 'eh-msg';
-      msg.textContent = it.msg;
-
-      const loc = document.createElement('div');
-      loc.className = 'eh-loc';
-      loc.textContent = `Set ${it.setIdx} · Row ${it.rowIdx}`;
-
-      li.appendChild(badge);
-      li.appendChild(msg);
-      li.appendChild(loc);
-      ehList.appendChild(li);
-    }
-    ehSummary.textContent = (e + w === 0) ? 'No issues found' : `${e} error${e!==1?'s':''}, ${w} warning${w!==1?'s':''}`;
-    // Console diag
-    console.log(`[EH] scan: ${e} errors, ${w} warnings, ${issues.length} total`);
-  }
-
-  function scanAndRender() {
-    const src = textArea?.value || '';
-    const issues = scanDocument(src);
-    renderIssues(issues);
-  }
-
-  // Expose minimal debug
-  window.__EH = { scanAndRender, scanDocument, extractTupleSegment, splitFieldsRobust };
-
-  // --- OPTIONAL: Auto-open for quick verification ---
-  // openEHModal();
-});
-</script>
 <script id="append-prepend-plugin">
 /*
   Append/Prepend Plugin (raw-preserving)
@@ -3648,6 +3439,7 @@ document.addEventListener('DOMContentLoaded', () => {
   const sepChk     = document.getElementById('tmSepBlank');
   const applyBtn   = document.getElementById('tmApplyBtn');
   const cancelBtn  = document.getElementById('tmCancelBtn');
+  const altListEl  = document.getElementById('tmListAlt');
 
   // --- helpers ---
   function replaceNthFieldInFirstTuple(line, n1, value) {
@@ -3662,6 +3454,7 @@ document.addEventListener('DOMContentLoaded', () => {
     if (idx0 < 0 || idx0 >= parts.length) return line;
 
     const target = parts[idx0];
+    // If destination is quoted, escape inner single quotes by doubling them
     const v = isQuoted(target) ? `'${String(value).replace(/'/g, "''")}'` : String(value);
     parts[idx0] = v;
     return before + joinFields(parts) + after;
@@ -3676,17 +3469,44 @@ document.addEventListener('DOMContentLoaded', () => {
     return { lines, start, end };
   }
 
+  function getMethod2Items() {
+    const raw = (altListEl?.value ?? '').trim();
+    if (!raw) return [];
+    return raw.split(/\r?\n/).map(s => s.trim()).filter(Boolean);
+  }
+
+  function getMethod1Items() {
+    // falls back to your already-collected Copy Board items
+    // (collectedItems is provided by your board logic)
+    return Array.isArray(collectedItems) ? collectedItems : [];
+  }
+
+  function getSourceItems() {
+    // Prefer Method 2 when textarea is non-empty; otherwise use Copy Board (Method 1)
+    const m2 = getMethod2Items();
+    if (m2.length > 0) return m2;
+    return getMethod1Items();
+  }
+
   function applyTemplate() {
     const fieldN = Number(fieldInput.value);
-    if (!Number.isInteger(fieldN) || fieldN < 1) { alert('Enter a valid 1-based field index (≥ 1).'); return; }
-    if (!Array.isArray(collectedItems) || collectedItems.length === 0) { alert('Copy Board is empty. Add items first.'); return; }
+    if (!Number.isInteger(fieldN) || fieldN < 1) {
+      alert('Enter a valid 1-based field index (≥ 1).');
+      return;
+    }
+
+    const items = getSourceItems();
+    if (!Array.isArray(items) || items.length === 0) {
+      alert('No items found. Add items to Copy Board (Method 1) or paste a one-per-line list (Method 2).');
+      return;
+    }
 
     const { lines, start, end } = getCurrentSetBounds();
     if (start === end) { alert('No active set at caret. Place caret inside a block.'); return; }
 
     const baseSet = lines.slice(start, end);
     const outputs = [];
-    for (const item of collectedItems) {
+    for (const item of items) {
       const copy = baseSet.map(line => replaceNthFieldInFirstTuple(line, fieldN, item));
       outputs.push(copy.join('\n'));
     }
@@ -3777,13 +3597,10 @@ document.addEventListener('DOMContentLoaded', () => {
 <div class="overlay" id="template-maker-modal" aria-modal="true" role="dialog">
   <div class="dialog">
     <div class="title">Template Maker</div>
-    <div class="hint">
-      The <b>current set</b> (block around the caret) becomes a <b>working template</b>. A copy of that set is created for each
-      item in the <b>Copy Board</b>, and the item is placed into the chosen <b>n’th field</b> of <em>every row</em> in that copy.
-      All copies are appended to the end of the document.
-    </div>
-    <div class="row">
-      <label>Field # (1‑based)
+
+    <!-- Shared options -->
+    <div class="row" style="margin-bottom:6px;">
+      <label>Field # (1-based)
         <input type="number" id="tmFieldIndex" min="1" value="1" style="width:100px;">
       </label>
       <label style="margin-left:8px;">
@@ -3791,17 +3608,276 @@ document.addEventListener('DOMContentLoaded', () => {
         Add blank line between copies
       </label>
     </div>
+
+    <!-- Method 1 -->
+    <div class="hint" style="margin-top:6px;"><b>Method 1 — Use Copy Board (CSV-aware)</b></div>
+    <div class="hint">
+      The <b>current set</b> (block around the caret) becomes a <b>working template</b>.
+      A copy is created for each item in the <b>Copy Board</b>, and that item is placed in the chosen
+      <b>n’th field</b> of <em>every row</em> in that copy. All copies are appended to the end of the document.
+    </div>
+
+    <!-- Method 2 -->
+    <div class="divider"></div>
+    <div class="hint"><b>Method 2 — One-per-line list</b></div>
+    <div class="hint" style="margin-bottom:6px;">
+      <i>Note:</i> Copy Board uses a CSV list. Place a <b>one-per-line</b> list here to maintain commas inside a field item.
+    </div>
+    <div class="row" style="margin-bottom:0;">
+      <textarea id="tmListAlt" placeholder="one item per line…" style="width:100%;min-height:120px;background:var(--editor);color:var(--fg);border:1px solid var(--border);border-radius:8px;padding:10px;font-family: ui-monospace, Menlo, Consolas, monospace;line-height:1.4;"></textarea>
+    </div>
+
     <div class="row">
       <small class="hint">
-        Tip: The set is the block of non‑blank lines around your caret. If the field index is larger than the row’s field count,
+        Tip: The set is the block of non-blank lines around your caret. If the field index is larger than the row’s field count,
         that row is skipped (keeps the original row).
       </small>
     </div>
+
     <div class="btns">
       <button id="tmCancelBtn">Cancel</button>
       <button id="tmApplyBtn" class="primary">Make Templates</button>
     </div>
   </div>
 </div>
+<script id="template-maker-plugin">
+// Template Maker plugin (duplicate-safe, single-fire binding)
+// - DOMContentLoaded wrapped
+// - Idempotent init via window.__tm_init_tm
+// - Replaces buttons before (re)binding to avoid duplicate listeners
+// - Method 1: Copy Board (CSV-aware)
+// - Method 2: One-per-line list (preserves commas in items)
+
+(function(){
+  document.addEventListener('DOMContentLoaded', () => {
+    // ---- one-time init guard ----
+    if (window.__tm_init_tm) return;
+    window.__tm_init_tm = true;
+
+    // ---- element refs ----
+    const modal       = document.getElementById('template-maker-modal');
+    const openBtn     = document.getElementById('mnuTemplateMaker');
+    const fieldInput  = document.getElementById('tmFieldIndex');
+    const sepChk      = document.getElementById('tmSepBlank');
+    const applyBtn    = document.getElementById('tmApplyBtn');
+    const cancelBtn   = document.getElementById('tmCancelBtn');
+    const altListEl   = document.getElementById('tmListAlt'); // Method 2 textarea
+    const editor      = window.textArea || document.getElementById('textArea');
+
+    // Required pieces must exist; fail safe otherwise
+    if (!modal || !openBtn || !fieldInput || !applyBtn || !cancelBtn || !editor) {
+      console.warn('[TemplateMaker] Missing required DOM nodes.');
+      return;
+    }
+
+    // ---- utilities ----
+    const isQuoted = (s) => typeof s === 'string' && s.trim().startsWith("'") && s.trim().endsWith("'");
+
+    function joinFields(parts){
+      // Expect parts already properly quoted/unquoted per your parser
+      // If your app provides a joinFields, prefer that
+      if (typeof window.joinFields === 'function') return window.joinFields(parts);
+      // Fallback: join with commas and wrap in parentheses
+      const inside = parts.join(', ');
+      return '(' + inside + ')';
+    }
+
+    function getLineIndexAndColumn(text, pos){
+      if (typeof window.getLineIndexAndColumn === 'function') return window.getLineIndexAndColumn(text, pos);
+      const lines = text.split(/\n/);
+      let count = 0; let lineIndex = 0; let col = 0;
+      for (let i=0;i<lines.length;i++){
+        const len = lines[i].length + 1; // +1 for \n
+        if (count + len > pos){ lineIndex = i; col = pos - count; break; }
+        count += len;
+      }
+      return { lines, lineIndex, column: col };
+    }
+
+    function expandToSetBounds(lines, startIdx){
+      if (typeof window.expandToSetBounds === 'function'){
+        const ex = window.expandToSetBounds(lines, startIdx, startIdx);
+        return { start: ex.start, end: ex.end };
+      }
+      // Fallback: contiguous non-blank block
+      let s = startIdx, e = startIdx;
+      while (s>0 && lines[s-1].trim()!=='' ) s--;
+      while (e<lines.length && lines[e].trim()!=='') e++;
+      return { start: s, end: e };
+    }
+
+    function findAllTuplesInLineSmart(line){
+      if (typeof window.findAllTuplesInLineSmart === 'function') return window.findAllTuplesInLineSmart(line);
+      // Fallback naive tuple capture: first balanced parens
+      const out = [];
+      for (let i=0;i<line.length;i++){
+        if (line[i] !== '(') continue;
+        let depth=1, j=i+1;
+        for (; j<line.length; j++){
+          if (line[j] === '(') depth++;
+          else if (line[j] === ')'){ depth--; if (depth===0) break; }
+        }
+        if (depth===0){ out.push({ open:i, close:j+1, raw: line.slice(i, j+1) }); i=j; }
+      }
+      return out;
+    }
+
+    function splitFieldsRobust(tupleRaw){
+      if (typeof window.splitFieldsRobust === 'function') return window.splitFieldsRobust(tupleRaw);
+      // Fallback: split on commas outside quotes within ( ... )
+      const inner = tupleRaw.trim().replace(/^\(|\)$/g,'');
+      const parts = [];
+      let buf = '';
+      let inStr = false;
+      for (let i=0;i<inner.length;i++){
+        const ch = inner[i];
+        if (inStr){
+          if (ch === '\\'){ buf += ch; i++; if (i<inner.length) buf += inner[i]; continue; }
+          if (ch === "'"){
+            if (inner[i+1] === "'") { buf += "''"; i++; continue; }
+            inStr = false; buf += ch; continue;
+          }
+          buf += ch; continue;
+        } else {
+          if (ch === "'") { inStr = true; buf += ch; continue; }
+          if (ch === ','){ parts.push(buf.trim()); buf=''; continue; }
+          buf += ch; continue;
+        }
+      }
+      if (buf.length) parts.push(buf.trim());
+      return parts;
+    }
+
+    function replaceNthFieldInFirstTuple(line, n1, value){
+      const tuples = findAllTuplesInLineSmart(line);
+      if (!tuples.length) return line;
+      const t = tuples[0];
+      const before = line.slice(0, t.open);
+      const after  = line.slice(t.close);
+      const parts  = splitFieldsRobust(t.raw);
+
+      const idx0 = (n1|0) - 1;
+      if (idx0 < 0 || idx0 >= parts.length) return line;
+
+      const target = (parts[idx0]||'').trim();
+      const asString = String(value);
+      const safeVal = isQuoted(target) ? `'${asString.replace(/'/g, "''")}'` : asString;
+      parts[idx0] = safeVal;
+      return before + joinFields(parts) + after;
+    }
+
+    function getCurrentSet(){
+      const content = editor.value;
+      const caret   = editor.selectionStart ?? 0;
+      const info    = getLineIndexAndColumn(content, caret);
+      const { start, end } = expandToSetBounds(info.lines, info.lineIndex);
+      return { lines: info.lines, start, end };
+    }
+
+    function getMethod2Items(){
+      const raw = (altListEl?.value ?? '').trim();
+      if (!raw) return [];
+      return raw.split(/\r?\n/).map(s=>s.trim()).filter(Boolean);
+    }
+
+    function getMethod1Items(){
+      return Array.isArray(window.collectedItems) ? window.collectedItems : [];
+    }
+
+    function getSourceItems(){
+      const m2 = getMethod2Items();
+      return m2.length ? m2 : getMethod1Items();
+    }
+
+    function appendWithSingleBlank(doc, block){
+      const trimmed = doc.replace(/\s+$/,'');
+      return trimmed + '\n\n' + block;
+    }
+
+    // ---- single-fire helpers ----
+    function bindSingleClick(btn, handler){
+      // Replace node to strip any pre-existing listeners
+      const fresh = btn.cloneNode(true);
+      btn.parentNode.replaceChild(fresh, btn);
+      let busy = false;
+      fresh.addEventListener('click', (ev) => {
+        if (busy) return; // prevent accidental double-fire
+        busy = true;
+        try { handler(ev); }
+        finally { setTimeout(()=>{ busy = false; }, 0); }
+      });
+      return fresh;
+    }
+
+    function openModal(){
+      try { window.closeAll?.(); } catch {}
+      modal.style.display = 'flex';
+      // Focus first input for UX
+      try { fieldInput?.focus(); } catch {}
+    }
+    function closeModal(){ modal.style.display = 'none'; }
+
+    // ---- bind buttons once (duplicate-safe) ----
+    const applyHandler = () => {
+      const fieldN = Number(fieldInput.value);
+      if (!Number.isInteger(fieldN) || fieldN < 1) { alert('Enter a valid 1-based field index (\u2265 1).'); return; }
+
+      const items = getSourceItems();
+      if (!items.length) { alert('No items found. Use Copy Board (Method 1) or paste a one-per-line list (Method 2).'); return; }
+
+      const { lines, start, end } = getCurrentSet();
+      if (start === end) { alert('No active set at caret. Place caret inside a non-blank block.'); return; }
+
+      const baseSet = lines.slice(start, end);
+      const outputs = [];
+      for (const item of items) {
+        const copy = baseSet.map(line => replaceNthFieldInFirstTuple(line, fieldN, item));
+        outputs.push(copy.join('\n'));
+      }
+
+      const block = outputs.join(sepChk && sepChk.checked ? '\n\n' : '\n');
+      editor.value = appendWithSingleBlank(editor.value, block);
+
+      const caret = editor.selectionStart ?? editor.value.length;
+      editor.setSelectionRange(caret, caret);
+
+      try { window.pushSnapshot?.(); } catch {}
+      try { window.updateRowsCountPill?.(); } catch {}
+      try { window.updateBoardView?.(); } catch {}
+
+      closeModal();
+    };
+
+    // Replace and bind buttons to guarantee single listener
+    const applyBtnBound  = bindSingleClick(applyBtn, applyHandler);
+    const cancelBtnBound = bindSingleClick(cancelBtn, () => closeModal());
+
+    // Outer modal interactions
+    // Ensure open is bound once
+    (function bindOpenOnce(){
+      const freshOpen = openBtn.cloneNode(true);
+      openBtn.parentNode.replaceChild(freshOpen, openBtn);
+      freshOpen.addEventListener('click', openModal);
+    })();
+
+    // Click outside to close (duplicate-safe)
+    (function bindOverlayOnce(){
+      const handler = (e) => { if (e.target === modal) closeModal(); };
+      const fresh = modal.cloneNode(true);
+      // Preserve inner HTML when cloning the entire modal would drop children; instead, don't replace modal.
+      // Simpler approach: remove any previous same handler by storing a symbol-keyed flag.
+    })();
+
+    // ESC to close (bind once)
+    (function bindEscOnce(){
+      if (window.__tm_esc_bound) return; window.__tm_esc_bound = true;
+      document.addEventListener('keydown', (e) => {
+        if (modal.style.display === 'flex' && e.key === 'Escape') closeModal();
+      });
+    })();
+
+  });
+})();
+</script>
 </body>
 </html>
