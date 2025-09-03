@@ -1,5 +1,9 @@
 Sep 3rd, 2025
 
+* Extended template maker to have a one per line method to maintain commas in field values. Copy Board takes csv lists.
+
+Sep 3rd, 2025
+
 * Created new tool at Tools -> Template Maker. Template maker will turn the set of rows in the document into a working template. Every item in the Copy Board will become a new copy with Copy Board item at n'th field. The finished sets will be appended to the document.
 * Totally broke debugging. Not sure if repair is coming any time soon.
 
