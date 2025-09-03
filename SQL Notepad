@@ -420,6 +420,9 @@ body.interface-hidden textarea#textArea { margin-left: 12px; }
   background: var(--editor); color: var(--fg);
 }
 
+/* Template Maker (scoped) */
+#template-maker-modal .title { margin-bottom: 6px; }
+#template-maker-modal .dialog .hint { margin-bottom: 10px; }
 
 /* Show the safety button when hidden */
 body.interface-hidden #showControlsBtn { display: inline-block; }
@@ -467,6 +470,7 @@ body.interface-hidden #showControlsBtn { display: inline-block; }
 
         <li class="appmenu-sep" aria-hidden="true"></li>
         <li><button id="mnuListExtractor" role="menuitem">List Extractor</button></li>
+		<li><button id="mnuTemplateMaker" role="menuitem">Template Maker</button></li>
 		<li><button id="mnuErrorHandling" role="menuitem">Debugging</button></li>
       </ul>
     </li>
@@ -3633,6 +3637,92 @@ document.addEventListener('DOMContentLoaded', () => {
   });
 });
 </script>
+<script id="template-maker-plugin">
+document.addEventListener('DOMContentLoaded', () => {
+  // Elements
+  const modal   = document.getElementById('template-maker-modal');
+  const openBtn = document.getElementById('mnuTemplateMaker');
+  if (!modal || !openBtn) return; // HTML missing? abort quietly
+
+  const fieldInput = document.getElementById('tmFieldIndex');
+  const sepChk     = document.getElementById('tmSepBlank');
+  const applyBtn   = document.getElementById('tmApplyBtn');
+  const cancelBtn  = document.getElementById('tmCancelBtn');
+
+  // --- helpers ---
+  function replaceNthFieldInFirstTuple(line, n1, value) {
+    const tuples = findAllTuplesInLineSmart(line);
+    if (!tuples.length) return line;
+    const t = tuples[0];
+    const before = line.slice(0, t.open);
+    const after  = line.slice(t.close);
+    const parts  = splitFieldsRobust(t.raw);
+
+    const idx0 = (n1|0) - 1;
+    if (idx0 < 0 || idx0 >= parts.length) return line;
+
+    const target = parts[idx0];
+    const v = isQuoted(target) ? `'${String(value).replace(/'/g, "''")}'` : String(value);
+    parts[idx0] = v;
+    return before + joinFields(parts) + after;
+  }
+
+  function getCurrentSetBounds() {
+    const content = textArea.value;
+    const caret   = textArea.selectionStart ?? 0;
+    const info    = getLineIndexAndColumn(content, caret);
+    const lines   = info.lines;
+    const { start, end } = expandToSetBounds(lines, info.lineIndex, info.lineIndex);
+    return { lines, start, end };
+  }
+
+  function applyTemplate() {
+    const fieldN = Number(fieldInput.value);
+    if (!Number.isInteger(fieldN) || fieldN < 1) { alert('Enter a valid 1-based field index (≥ 1).'); return; }
+    if (!Array.isArray(collectedItems) || collectedItems.length === 0) { alert('Copy Board is empty. Add items first.'); return; }
+
+    const { lines, start, end } = getCurrentSetBounds();
+    if (start === end) { alert('No active set at caret. Place caret inside a block.'); return; }
+
+    const baseSet = lines.slice(start, end);
+    const outputs = [];
+    for (const item of collectedItems) {
+      const copy = baseSet.map(line => replaceNthFieldInFirstTuple(line, fieldN, item));
+      outputs.push(copy.join('\n'));
+    }
+
+    // Build final block; keep user’s "blank line between copies" setting
+    const block = outputs.join(sepChk && sepChk.checked ? '\n\n' : '\n');
+
+    // Append after the document's last set with EXACTLY one blank line separation
+    let doc = textArea.value.replace(/\s+$/, '');
+    textArea.value = doc + '\n\n' + block;
+
+    const caret = textArea.selectionStart ?? textArea.value.length;
+    textArea.setSelectionRange(caret, caret);
+
+    try { pushSnapshot(); } catch {}
+    try { updateRowsCountPill(); } catch {}
+    try { updateBoardView(); } catch {}
+  }
+
+  // --- modal wiring ---
+  function openModal() {
+    try { window.closeAll?.(); } catch {}
+    modal.style.display = 'flex';
+    setTimeout(() => fieldInput?.focus(), 0);
+  }
+  function closeModal() { modal.style.display = 'none'; }
+
+  openBtn.addEventListener('click', openModal);
+  applyBtn.addEventListener('click', () => { applyTemplate(); closeModal(); });
+  cancelBtn.addEventListener('click', closeModal);
+  modal.addEventListener('click', (e) => { if (e.target === modal) closeModal(); });
+  document.addEventListener('keydown', (e) => {
+    if (modal.style.display === 'flex' && e.key === 'Escape') closeModal();
+  });
+});
+</script>
 <!-- Append/Prepend Modal -->
 <div class="overlay" id="append-prepend-modal" aria-modal="true" role="dialog">
   <div class="dialog">
@@ -3680,6 +3770,36 @@ document.addEventListener('DOMContentLoaded', () => {
     <div class="btns">
       <button id="ap_apply_string" class="primary">Apply String → Target</button>
       <button id="ap_close_btn">Close</button>
+    </div>
+  </div>
+</div>
+<!-- Template Maker Modal -->
+<div class="overlay" id="template-maker-modal" aria-modal="true" role="dialog">
+  <div class="dialog">
+    <div class="title">Template Maker</div>
+    <div class="hint">
+      The <b>current set</b> (block around the caret) becomes a <b>working template</b>. A copy of that set is created for each
+      item in the <b>Copy Board</b>, and the item is placed into the chosen <b>n’th field</b> of <em>every row</em> in that copy.
+      All copies are appended to the end of the document.
+    </div>
+    <div class="row">
+      <label>Field # (1‑based)
+        <input type="number" id="tmFieldIndex" min="1" value="1" style="width:100px;">
+      </label>
+      <label style="margin-left:8px;">
+        <input type="checkbox" id="tmSepBlank" checked>
+        Add blank line between copies
+      </label>
+    </div>
+    <div class="row">
+      <small class="hint">
+        Tip: The set is the block of non‑blank lines around your caret. If the field index is larger than the row’s field count,
+        that row is skipped (keeps the original row).
+      </small>
+    </div>
+    <div class="btns">
+      <button id="tmCancelBtn">Cancel</button>
+      <button id="tmApplyBtn" class="primary">Make Templates</button>
     </div>
   </div>
 </div>
