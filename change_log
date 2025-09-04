@@ -1,3 +1,9 @@
+Sep 4th, 2025
+
+* Added Ctrl+K hoykey - coppies current field across tuples in set.
+* Update Template Maker - now both methods are working.
+* Debugged Debugger a bit - still working like garbage, shoddy debugging, with errors.
+
 Sep 3rd, 2025
 
 * Extended template maker to have a one per line method to maintain commas in field values. Copy Board takes csv lists.
