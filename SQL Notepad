@@ -786,6 +786,7 @@ line'></textarea>
           <li><kbd>Ctrl</kbd>+<kbd>G</kbd> – insert a unique random token at the caret</li>
           <li><kbd>Ctrl</kbd>+<kbd>D</kbd> – duplicate current line (down). If enabled in <em>Settings</em>, clears the <em>last field</em> on the duplicate</li>
           <li><kbd>Ctrl</kbd>+<kbd>R</kbd> – remove current line, crimping content upward</li>
+		  <li><kbd>Ctrl</kbd>+<kbd>K</kbd> – Copy current field across all tuples in set</li>
           <li><kbd>Ctrl</kbd>+<kbd>Z</kbd>/<kbd>Ctrl</kbd>+<kbd>Y</kbd> – undo/redo snapshots (10-depth ring)</li>
 		  <li><kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>E</kbd> – Open duplicate token report</li>
 		   <li><kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>U</kbd> – Open debugging report</li>
@@ -1203,6 +1204,19 @@ function countCommasBeforeIndexRobust(line, tupleOpen, indexInLine) {
   return commas;
 }
 
+function enumerateSets(lines) {
+  const sets = [];
+  let i = 0;
+  while (i < lines.length) {
+    while (i < lines.length && lines[i].trim() === '') i++;
+    if (i >= lines.length) break;
+    const start = i;
+    while (i < lines.length && lines[i].trim() !== '') i++;
+    sets.push({ start, end: i }); // [start, end)
+  }
+  return sets;
+}
+
 /* ============================
    Keyboard: Collect / Import / Dump / Duplicate / Remove / Token / Undo-Redo / Toggle UI
 ============================ */
@@ -1430,6 +1444,7 @@ function replaceLastFieldWithTokenAlways(tupleRaw, token) {
   parts[parts.length - 1] = replacement;
   return joinFields(parts);
 }
+
 document.getElementById('tokenizeBtn').addEventListener('click', () => {
   if (!textArea) return;
   let content = textArea.value;
@@ -3594,6 +3609,7 @@ document.addEventListener('DOMContentLoaded', () => {
   </div>
 </div>
 <!-- Template Maker Modal -->
+<!-- Template Maker Modal -->
 <div class="overlay" id="template-maker-modal" aria-modal="true" role="dialog">
   <div class="dialog">
     <div class="title">Template Maker</div>
@@ -3616,9 +3632,13 @@ document.addEventListener('DOMContentLoaded', () => {
       A copy is created for each item in the <b>Copy Board</b>, and that item is placed in the chosen
       <b>n’th field</b> of <em>every row</em> in that copy. All copies are appended to the end of the document.
     </div>
+    <div class="btns" style="margin-top:8px;">
+      <button id="tmApplyCBBtn" class="primary">Make Templates from Copy Board</button>
+    </div>
+
+    <div class="divider"></div>
 
     <!-- Method 2 -->
-    <div class="divider"></div>
     <div class="hint"><b>Method 2 — One-per-line list</b></div>
     <div class="hint" style="margin-bottom:6px;">
       <i>Note:</i> Copy Board uses a CSV list. Place a <b>one-per-line</b> list here to maintain commas inside a field item.
@@ -3626,256 +3646,718 @@ document.addEventListener('DOMContentLoaded', () => {
     <div class="row" style="margin-bottom:0;">
       <textarea id="tmListAlt" placeholder="one item per line…" style="width:100%;min-height:120px;background:var(--editor);color:var(--fg);border:1px solid var(--border);border-radius:8px;padding:10px;font-family: ui-monospace, Menlo, Consolas, monospace;line-height:1.4;"></textarea>
     </div>
-
     <div class="row">
       <small class="hint">
         Tip: The set is the block of non-blank lines around your caret. If the field index is larger than the row’s field count,
         that row is skipped (keeps the original row).
       </small>
     </div>
-
     <div class="btns">
-      <button id="tmCancelBtn">Cancel</button>
-      <button id="tmApplyBtn" class="primary">Make Templates</button>
+      <button id="tmApplyLinesBtn" class="primary">Make Templates from Lines</button>
+      <button id="tmCloseBtn">Close</button>
     </div>
   </div>
 </div>
 <script id="template-maker-plugin">
-// Template Maker plugin (duplicate-safe, single-fire binding)
-// - DOMContentLoaded wrapped
-// - Idempotent init via window.__tm_init_tm
-// - Replaces buttons before (re)binding to avoid duplicate listeners
-// - Method 1: Copy Board (CSV-aware)
-// - Method 2: One-per-line list (preserves commas in items)
-
-(function(){
+/**
+ * Template Maker (v2)
+ * - Two independent methods, each with its own fire button:
+ *   (1) Copy Board (CSV/lines/whitespace aware, uses your collectedItems)
+ *   (2) One-per-line textarea (preserves commas within items)
+ * - Appends all generated copies to the **end of the document**, with optional 1 blank line between
+ * - Single-fire bindings, DOMContentLoaded-wrapped, defensive fallbacks to your existing helpers
+ */
+(function () {
   document.addEventListener('DOMContentLoaded', () => {
-    // ---- one-time init guard ----
-    if (window.__tm_init_tm) return;
-    window.__tm_init_tm = true;
+    if (window.__tm_v2_init) return; // idempotent
+    window.__tm_v2_init = true;
 
-    // ---- element refs ----
-    const modal       = document.getElementById('template-maker-modal');
-    const openBtn     = document.getElementById('mnuTemplateMaker');
-    const fieldInput  = document.getElementById('tmFieldIndex');
-    const sepChk      = document.getElementById('tmSepBlank');
-    const applyBtn    = document.getElementById('tmApplyBtn');
-    const cancelBtn   = document.getElementById('tmCancelBtn');
-    const altListEl   = document.getElementById('tmListAlt'); // Method 2 textarea
-    const editor      = window.textArea || document.getElementById('textArea');
+    // ---- Element refs
+    const modal          = document.getElementById('template-maker-modal');
+    const openBtn        = document.getElementById('mnuTemplateMaker');
+    const closeBtn       = document.getElementById('tmCloseBtn');
+    const fieldInput     = document.getElementById('tmFieldIndex');
+    const sepChk         = document.getElementById('tmSepBlank');
+    const applyCBBtn     = document.getElementById('tmApplyCBBtn');
+    const applyLinesBtn  = document.getElementById('tmApplyLinesBtn');
+    const altListEl      = document.getElementById('tmListAlt');
+    const editor         = window.textArea || document.getElementById('textArea');
 
-    // Required pieces must exist; fail safe otherwise
-    if (!modal || !openBtn || !fieldInput || !applyBtn || !cancelBtn || !editor) {
-      console.warn('[TemplateMaker] Missing required DOM nodes.');
+    if (!modal || !openBtn || !fieldInput || !applyCBBtn || !applyLinesBtn || !editor) {
+      console.warn('[TemplateMaker v2] Missing required DOM nodes.');
       return;
     }
 
-    // ---- utilities ----
-    const isQuoted = (s) => typeof s === 'string' && s.trim().startsWith("'") && s.trim().endsWith("'");
+    // ---- App helpers (prefer your existing ones)
+    const joinFields = (parts) => (typeof window.joinFields === 'function')
+      ? window.joinFields(parts)
+      : '(' + parts.join(', ') + ')';
 
-    function joinFields(parts){
-      // Expect parts already properly quoted/unquoted per your parser
-      // If your app provides a joinFields, prefer that
-      if (typeof window.joinFields === 'function') return window.joinFields(parts);
-      // Fallback: join with commas and wrap in parentheses
-      const inside = parts.join(', ');
-      return '(' + inside + ')';
-    }
-
-    function getLineIndexAndColumn(text, pos){
+    const getLineIndexAndColumn = (text, pos) => {
       if (typeof window.getLineIndexAndColumn === 'function') return window.getLineIndexAndColumn(text, pos);
-      const lines = text.split(/\n/);
-      let count = 0; let lineIndex = 0; let col = 0;
-      for (let i=0;i<lines.length;i++){
-        const len = lines[i].length + 1; // +1 for \n
-        if (count + len > pos){ lineIndex = i; col = pos - count; break; }
-        count += len;
+      const lines = text.split(/\r?\n/);
+      let acc = 0;
+      for (let i = 0; i < lines.length; i++) {
+        const len = lines[i].length + 1;
+        if (pos <= acc + len - 1) return { lines, lineIndex: i, column: pos - acc };
+        acc += len;
       }
-      return { lines, lineIndex, column: col };
-    }
+      return { lines, lineIndex: lines.length - 1, column: lines.at(-1)?.length ?? 0 };
+    };
 
-    function expandToSetBounds(lines, startIdx){
-      if (typeof window.expandToSetBounds === 'function'){
+    const expandToSetBounds = (lines, startIdx) => {
+      if (typeof window.expandToSetBounds === 'function') {
         const ex = window.expandToSetBounds(lines, startIdx, startIdx);
         return { start: ex.start, end: ex.end };
       }
-      // Fallback: contiguous non-blank block
+      // contiguous non-blank block
       let s = startIdx, e = startIdx;
-      while (s>0 && lines[s-1].trim()!=='' ) s--;
-      while (e<lines.length && lines[e].trim()!=='') e++;
-      return { start: s, end: e };
+      while (s > 0 && lines[s - 1].trim() !== '') s--;
+      while (e < lines.length - 1 && lines[e + 1].trim() !== '') e++;
+      return { start: s, end: e + 1 }; // end is exclusive
+    };
+
+    const findAllTuplesInLineSmart = (line) => (typeof window.findAllTuplesInLineSmart === 'function')
+      ? window.findAllTuplesInLineSmart(line)
+      : []; // bail if not available
+
+    const splitFieldsRobust = (tupleRaw) => (typeof window.splitFieldsRobust === 'function')
+      ? window.splitFieldsRobust(tupleRaw)
+      : []; // bail if not available
+
+    const isQuoted = (s) => {
+      const t = String(s).trim();
+      return t.startsWith("'") && t.endsWith("'");
+    };
+
+    // Extract the **current set** as lines and tuple segments
+    function getCurrentSetInfo() {
+      const content = editor.value;
+      const caret   = editor.selectionStart ?? 0;
+      const { lines, lineIndex } = getLineIndexAndColumn(content, caret);
+      const { start, end } = expandToSetBounds(lines, lineIndex);
+      return { content, lines, start, end };
     }
 
-    function findAllTuplesInLineSmart(line){
+    // Build copies: for each item, clone the set and put item into nth field of every tuple in that set
+    function buildCopiesFromItems(items, n1, addBlank) {
+      if (!Array.isArray(items) || items.length === 0) return '';
+
+      const { content, lines, start, end } = getCurrentSetInfo();
+      const setLines = lines.slice(start, end); // exclusive end
+      const copies = [];
+
+      for (const rawItem of items) {
+        const item = String(rawItem);
+        const newLines = setLines.map((line) => {
+          if (!line.trim()) return line;
+
+          const tuples = findAllTuplesInLineSmart(line);
+          if (!tuples.length) return line;
+
+          // Apply to ALL tuples in the line
+          let out = line;
+          for (let k = tuples.length - 1; k >= 0; k--) {
+            const t = tuples[k];
+            const before = out.slice(0, t.open);
+            const after  = out.slice(t.close);
+            const parts  = splitFieldsRobust(t.raw);
+
+            const idx0 = (n1|0) - 1;
+            if (idx0 < 0 || idx0 >= parts.length) continue; // skip row if field too large
+
+            const target = parts[idx0];
+            parts[idx0] = isQuoted(target)
+              ? `'${item.replace(/'/g, "''")}'`
+              : item;
+
+            out = before + joinFields(parts) + after;
+          }
+          return out;
+        });
+
+        copies.push(newLines.join('\n'));
+      }
+
+      // Append with exactly one blank line between copies if requested
+      const sep = addBlank ? '\n\n' : '\n';
+      return copies.join(sep);
+    }
+
+    // Tokenize board text using your app’s logic (already present in your file)
+    function itemsFromCopyBoard() {
+      // Prefer the live queue if present; otherwise parse #board
+      if (Array.isArray(window.collectedItems) && window.collectedItems.length) {
+        return window.collectedItems.slice();
+      }
+      const boardArea = document.getElementById('board');
+      if (!boardArea) return [];
+      // Fallback: use your existing tokenizer if available
+      if (typeof window.tokenizeAuto === 'function') return window.tokenizeAuto(boardArea.value);
+      // Very safe fallback: split on newlines
+      return boardArea.value.split(/\r?\n/).map(s=>s.trim()).filter(Boolean);
+    }
+
+    function itemsFromLinesTextarea() {
+      const raw = (altListEl?.value ?? '').replace(/\r/g, '');
+      return raw.split('\n').map(s => s.trim()).filter(Boolean);
+    }
+
+    function appendToDocumentWithTrailingBlankBlock(block) {
+      if (!block) return;
+
+      const doc = editor.value.replace(/\r/g, '');
+      const docEndsWithBlank =
+        /\n\s*\n$/.test(doc) || doc.trim() === '';
+
+      // Always ensure **exactly one** full blank line separates last set and the new block
+      const spacer = doc.trim() === '' ? '' : (docEndsWithBlank ? '\n' : '\n\n');
+      editor.value = doc + spacer + block;
+    }
+
+    // ---- Method 1: Copy Board
+    function applyFromCopyBoard() {
+      const n1 = Number(fieldInput.value || 1);
+      if (!Number.isInteger(n1) || n1 < 1) { alert('Enter a valid 1-based field index.'); return; }
+
+      const items = itemsFromCopyBoard();
+      if (!items.length) { alert('Copy Board is empty.'); return; }
+
+      const block = buildCopiesFromItems(items, n1, !!sepChk.checked);
+      appendToDocumentWithTrailingBlankBlock(block);
+    }
+
+    // ---- Method 2: One-per-line textarea
+    function applyFromLines() {
+      const n1 = Number(fieldInput.value || 1);
+      if (!Number.isInteger(n1) || n1 < 1) { alert('Enter a valid 1-based field index.'); return; }
+
+      const items = itemsFromLinesTextarea();
+      if (!items.length) { alert('Please provide one-per-line items.'); return; }
+
+      const block = buildCopiesFromItems(items, n1, !!sepChk.checked);
+      appendToDocumentWithTrailingBlankBlock(block);
+    }
+
+    // ---- Modal open/close
+    function openModal() {
+      try { (closeBtn || {}).blur?.(); } catch {}
+      modal.style.display = 'flex';
+      setTimeout(() => fieldInput?.focus(), 0);
+    }
+    function closeModal() { modal.style.display = 'none'; }
+
+    // ---- Bindings (replace → rebind for single-fire)
+    openBtn.addEventListener('click', openModal, { once: false });
+    applyCBBtn.addEventListener('click', () => { applyFromCopyBoard(); closeModal(); }, { once: false });
+    applyLinesBtn.addEventListener('click', () => { applyFromLines(); closeModal(); }, { once: false });
+    closeBtn?.addEventListener('click', closeModal, { once: false });
+
+    modal.addEventListener('click', (e) => { if (e.target === modal) closeModal(); });
+    document.addEventListener('keydown', (e) => {
+      if (modal.style.display === 'flex' && e.key === 'Escape') closeModal();
+    });
+  });
+})();
+</script>
+<script id="copy-field-across-set-plugin">
+/**
+ * Copy Current Field Across Set — Hotkey: Ctrl/Cmd + K
+ * - Detects which tuple & field the caret is in.
+ * - Copies that field's value and writes it into the same field index
+ *   for every tuple of the current set (contiguous non-blank lines).
+ * - If the destination field is quoted, we auto-quote the value (and escape single quotes).
+ * - Uses app helpers when available; otherwise falls back to robust internal logic.
+ */
+(function () {
+  document.addEventListener('DOMContentLoaded', () => {
+    if (window.__copy_field_across_init__) return;
+    window.__copy_field_across_init__ = true;
+
+    const editor = window.textArea || document.getElementById('textArea');
+    if (!editor) return console.warn('[CopyFieldAcross] textarea not found');
+
+    // ---------- Helper: join fields into a tuple string ----------
+    const joinFields = (parts) => {
+      if (typeof window.joinFields === 'function') return window.joinFields(parts);
+      return '(' + parts.join(', ') + ')';
+    };
+
+    // ---------- Helper: expand to set bounds (contiguous non-blank lines) ----------
+    function getLineIndexAndColumn(text, pos) {
+      if (typeof window.getLineIndexAndColumn === 'function') return window.getLineIndexAndColumn(text, pos);
+      const lines = text.split(/\r?\n/);
+      let acc = 0;
+      for (let i = 0; i < lines.length; i++) {
+        const len = lines[i].length + 1; // +1 newline
+        if (pos <= acc + len - 1) return { lines, lineIndex: i, column: pos - acc };
+        acc += len;
+      }
+      return { lines, lineIndex: lines.length - 1, column: lines.at(-1)?.length ?? 0 };
+    }
+    function expandToSetBounds(lines, anchorIdx) {
+      if (typeof window.expandToSetBounds === 'function') {
+        const r = window.expandToSetBounds(lines, anchorIdx, anchorIdx);
+        return { start: r.start, end: r.end }; // end exclusive (per your helper)
+      }
+      let s = anchorIdx, e = anchorIdx;
+      while (s > 0 && lines[s - 1].trim() !== '') s--;
+      while (e < lines.length - 1 && lines[e + 1].trim() !== '') e++;
+      return { start: s, end: e + 1 };
+    }
+
+    // ---------- Tuple + field parsing ----------
+    const findAllTuplesInLineSmart = (line) => {
       if (typeof window.findAllTuplesInLineSmart === 'function') return window.findAllTuplesInLineSmart(line);
-      // Fallback naive tuple capture: first balanced parens
-      const out = [];
-      for (let i=0;i<line.length;i++){
-        if (line[i] !== '(') continue;
-        let depth=1, j=i+1;
-        for (; j<line.length; j++){
+      // Fallback: naive matcher for (...) blocks; relies on your robust helper when available.
+      const r = [];
+      let i = 0;
+      while (i < line.length) {
+        const open = line.indexOf('(', i);
+        if (open === -1) break;
+        let depth = 0, j = open;
+        for (; j < line.length; j++) {
           if (line[j] === '(') depth++;
-          else if (line[j] === ')'){ depth--; if (depth===0) break; }
+          else if (line[j] === ')') {
+            depth--;
+            if (depth === 0) { j++; break; }
+          }
         }
-        if (depth===0){ out.push({ open:i, close:j+1, raw: line.slice(i, j+1) }); i=j; }
+        if (depth === 0) {
+          const raw = line.slice(open, j);
+          r.push({ open, close: j, raw });
+          i = j;
+        } else {
+          break;
+        }
+      }
+      return r;
+    };
+
+    // Split tuple into fields WITH spans (start/end within tupleRaw)
+    // Handles single-quoted fields ('' for escaped apostrophe) and commas outside quotes.
+    function splitFieldsWithSpans(tupleRaw) {
+      // If app has a robust splitter that returns plain strings, we’ll adapt to spans.
+      if (typeof window.splitFieldsRobust === 'function') {
+        const arr = window.splitFieldsRobust(tupleRaw); // array of field strings
+        // Build spans by locating fields progressively (best-effort, stable if joinFields uses ", ").
+        let cursor = 0;
+        const parts = [];
+        for (let i = 0; i < arr.length; i++) {
+          const needle = arr[i].trim();
+          // Search forward for the next occurrence bounded by commas or parens
+          // Simple scan: skip leading spaces, commas, parens
+          while (cursor < tupleRaw.length && /\s|,|\(|\)/.test(tupleRaw[cursor])) cursor++;
+          let start = cursor;
+          // Expand until we hit a comma at the same paren depth (here within tupleRaw only)
+          let inQuote = false;
+          for (; cursor < tupleRaw.length; cursor++) {
+            const ch = tupleRaw[cursor];
+            if (ch === "'" && (!inQuote || tupleRaw[cursor + 1] !== "'")) inQuote = !inQuote;
+            if (!inQuote && ch === ',') break;
+            if (!inQuote && ch === ')') break;
+          }
+          let end = cursor;
+          parts.push({ text: tupleRaw.slice(start, end).trim(), start, end });
+          // Move past comma if present
+          if (tupleRaw[cursor] === ',') cursor++;
+        }
+        return annotateQuoted(parts);
+      }
+
+      // Local robust parser
+      const parts = [];
+      // Strip outer parens if present for easier indexing
+      let bodyStart = 0, bodyEnd = tupleRaw.length;
+      if (tupleRaw.trim().startsWith('(')) {
+        bodyStart = tupleRaw.indexOf('(') + 1;
+        bodyEnd   = tupleRaw.lastIndexOf(')');
+      }
+      if (bodyEnd < bodyStart) { bodyStart = 0; bodyEnd = tupleRaw.length; }
+      const s = tupleRaw.slice(bodyStart, bodyEnd);
+      let i = 0, start = 0, inQ = false;
+      while (i <= s.length) {
+        const ch = s[i];
+        const atEnd = i === s.length;
+        if (!inQ && (ch === ',' || atEnd)) {
+          const raw = s.slice(start, atEnd ? i : i).trim();
+          parts.push({ text: raw, start: bodyStart + start, end: bodyStart + (atEnd ? i : i) });
+          start = i + 1;
+          i++;
+          continue;
+        }
+        if (ch === "'") {
+          if (inQ) {
+            // check doubled quote escape
+            if (s[i + 1] === "'") { i += 2; continue; }
+            inQ = false; i++; continue;
+          } else { inQ = true; i++; continue; }
+        }
+        i++;
+      }
+      return annotateQuoted(parts);
+
+      function annotateQuoted(parts) {
+        return parts.map(p => {
+          const t = p.text.trim();
+          const quoted = t.startsWith("'") && t.endsWith("'");
+          const inner = quoted ? t.slice(1, -1).replace(/''/g, "'") : t;
+          return { ...p, quoted, text: t, inner };
+        });
+      }
+    }
+
+    // ---------- Core operation ----------
+    function copyCurrentFieldAcrossSet() {
+      const content = editor.value.replace(/\r/g, '');
+      const caret   = editor.selectionStart ?? 0;
+      const { lines, lineIndex, column } = getLineIndexAndColumn(content, caret);
+
+      // Identify current tuple and field under caret
+      const line = lines[lineIndex] ?? '';
+      const tuples = findAllTuplesInLineSmart(line);
+      if (!tuples.length) return; // not inside a tuple line — do nothing
+
+      // Find the tuple containing the caret
+      const absOffsetOfLine = (() => {
+        let off = 0;
+        for (let i = 0; i < lineIndex; i++) off += (lines[i].length + 1);
+        return off;
+      })();
+      const caretAbs = absOffsetOfLine + column;
+
+      let tupleIdx = -1;
+      for (let i = 0; i < tuples.length; i++) {
+        const t = tuples[i];
+        const openAbs = absOffsetOfLine + t.open;
+        const closeAbs = absOffsetOfLine + t.close;
+        if (caretAbs >= openAbs && caretAbs <= closeAbs) { tupleIdx = i; break; }
+      }
+      if (tupleIdx === -1) return; // caret not inside any tuple
+
+      // Determine field index within that tuple
+      const tCaret = tuples[tupleIdx];
+      const partsWithSpans = splitFieldsWithSpans(tCaret.raw);
+      const caretInTuple = caretAbs - (absOffsetOfLine + tCaret.open);
+      let fieldIdx = -1;
+      for (let i = 0; i < partsWithSpans.length; i++) {
+        const p = partsWithSpans[i];
+        if (caretInTuple >= p.start - tCaret.open && caretInTuple <= p.end - tCaret.open) {
+          fieldIdx = i; break;
+        }
+      }
+      if (fieldIdx === -1) return; // not in any field
+
+      const src = partsWithSpans[fieldIdx]; // {text, inner, quoted}
+      const srcInner = src.quoted ? src.inner : src.text;
+
+      // Expand to current set
+      const { start, end } = expandToSetBounds(lines, lineIndex);
+
+      // Build new lines for the set
+      const newLines = lines.slice(start, end).map((ln) => {
+        if (!ln.trim()) return ln;
+        const tps = findAllTuplesInLineSmart(ln);
+        if (!tps.length) return ln;
+
+        let out = ln;
+        for (let k = tps.length - 1; k >= 0; k--) {
+          const t = tps[k];
+          const before = out.slice(0, t.open);
+          const after  = out.slice(t.close);
+          // Prefer app splitter; fallback to local spans splitter (returning plain strings for writing)
+          let parts;
+          if (typeof window.splitFieldsRobust === 'function') {
+            parts = window.splitFieldsRobust(t.raw).slice();
+          } else {
+            parts = splitFieldsWithSpans(t.raw).map(p => p.text);
+          }
+          if (fieldIdx < 0 || fieldIdx >= parts.length) {
+            out = before + t.raw + after; // unchanged
+            continue;
+          }
+
+          // Respect destination quoting style
+          const destRaw = parts[fieldIdx].trim();
+          const destQuoted = destRaw.startsWith("'") && destRaw.endsWith("'");
+          parts[fieldIdx] = destQuoted
+            ? `'${String(srcInner).replace(/'/g, "''")}'`
+            : String(srcInner);
+
+          out = before + joinFields(parts) + after;
+        }
+        return out;
+      });
+
+      // Splice back into document
+      const head = lines.slice(0, start).join('\n');
+      const body = newLines.join('\n');
+      const tail = lines.slice(end).join('\n');
+      const glue1 = start > 0 ? '\n' : '';
+      const glue2 = end < lines.length ? '\n' : '';
+      editor.value = head + glue1 + body + glue2 + tail;
+    }
+
+    // ---------- Hotkey binding ----------
+    function isMac() { return /Mac|iPod|iPhone|iPad/.test(navigator.platform); }
+    editor.addEventListener('keydown', (e) => {
+      const meta = isMac() ? e.metaKey : e.ctrlKey;
+      if (meta && (e.key === 'k' || e.key === 'K')) {
+        e.preventDefault();
+        e.stopPropagation();
+        copyCurrentFieldAcrossSet();
+      }
+    }, { passive: false });
+  });
+})();
+</script>
+<script id="error-handling-plugin">
+/**
+ * Error Handling — v3 (WORKING)
+ * Changes requested:
+ *  - Accept backslash-escaped apostrophes inside quoted strings: \'  (no error #2)
+ *  - Keep strict SQL doubled-quote escaping valid: '' (no error #2)
+ *  - Flag FORWARD slash before apostrophe as wrong escape: /' (error #3)
+ *
+ * Modal:   #error-handling-modal
+ * List:    #ehList
+ * Order (strict):
+ *   (1) Unquoted string field
+ *   (2) Unescaped apostrophe inside quoted field (must be '' OR \")
+ *   (3) Wrong slash escape inside quoted field (detect /')
+ *   (4) Field count majority (skipped if any (1) exists)
+ */
+(() => {
+  document.addEventListener('DOMContentLoaded', () => {
+    // SINGLE-FIRE GUARD
+    if (window.__eh_single_init__) return;
+    window.__eh_single_init__ = true;
+
+    const modal     = document.getElementById('error-handling-modal');
+    const listEl    = document.getElementById('ehList');
+    const summary   = document.getElementById('ehSummary');
+    const btnRescan = document.getElementById('ehRescanBtn');
+    const btnClose  = document.getElementById('ehCloseBtn');
+    const btnOpen   = document.getElementById('mnuErrorHandling');
+    const editor    = window.textArea || document.getElementById('textArea');
+
+    if (!modal || !listEl || !editor) return;
+
+    // Debounce (correct syntax)
+    let debounceTimer = null, scanning = false;
+    const debounce = (fn, ms) => (...args) => {
+      clearTimeout(debounceTimer);
+      debounceTimer = setTimeout(() => fn(...args), ms);
+    };
+
+    // Prefer app tuple finder; otherwise fallback
+    const appFind = (line) => (typeof window.findAllTuplesInLineSmart === 'function')
+      ? window.findAllTuplesInLineSmart(line)
+      : null;
+
+    function fallbackFind(line){
+      const tuples = [];
+      let inQ = false;
+      for (let i = 0; i < line.length; i++){
+        const ch = line[i];
+        if (ch === "'"){
+          if (inQ){ if (line[i+1] === "'") { i++; } else { inQ = false; } }
+          else { inQ = true; }
+        } else if (!inQ && ch === '('){
+          const start = i; let j = i+1; let depth = 1; let q = false;
+          for (; j < line.length; j++){
+            const c = line[j];
+            if (c === "'"){
+              if (q){ if (line[j+1] === "'") { j++; } else { q = false; } }
+              else { q = true; }
+            } else if (!q){
+              if (c === '(') depth++;
+              else if (c === ')'){ depth--; if (depth === 0){ tuples.push({ open:start, close:j+1, raw: line.slice(start, j+1) }); i = j; break; } }
+            }
+          }
+        }
+      }
+      return tuples;
+    }
+
+    const findAllTuples = (line) => appFind(line) ?? fallbackFind(line);
+
+    // Utils
+    const getLines = () => (editor.value || '').replace(/\r/g,'').split('\n');
+    const isNumericLiteral = (s) => /^-?\d+(?:\.\d+)?$/.test(s);
+    const isNullishLiteral = (s) => /^(null)$/i.test(s);
+
+    function escapeHtml(s){
+      return String(s)
+        .replace(/&/g,'&amp;')
+        .replace(/</g,'&lt;')
+        .replace(/>/g,'&gt;')
+        .replace(/\"/g,'&quot;')
+        .replace(/'/g,'&#39;');
+    }
+    function push(arr, msg, lineIndex, tupleNo, fieldNo){ arr.push({ msg, lineIndex, tupleNo, fieldNo }); }
+
+    // Quote-aware field parser → [{ raw, trimmed, quoted, innerRaw }]
+    function parseFieldsWithMeta(tupleRaw){
+      const open = tupleRaw.indexOf('(');
+      const close = tupleRaw.lastIndexOf(')');
+      if (open === -1 || close === -1 || close <= open) return [];
+      const inner = tupleRaw.slice(open+1, close);
+
+      const out = [];
+      let buf = '';
+      let inQ = false;
+      for (let i = 0; i < inner.length; i++){
+        const ch = inner[i];
+        if (ch === "'"){
+          if (inQ){
+            if (inner[i+1] === "'") { buf += "''"; i++; }
+            else { inQ = false; buf += "'"; }
+          } else { inQ = true; buf += "'"; }
+        } else if (!inQ && ch === ','){
+          const raw = buf.trim();
+          const quoted = raw.startsWith("'") && raw.endsWith("'");
+          const innerRaw = quoted ? raw.slice(1, -1) : raw;
+          out.push({ raw, trimmed: raw, quoted, innerRaw });
+          buf = '';
+        } else { buf += ch; }
+      }
+      const rawFinal = buf.trim();
+      if (rawFinal.length || inner.endsWith(',')){
+        const quoted = rawFinal.startsWith("'") && rawFinal.endsWith("'");
+        const innerRaw = quoted ? rawFinal.slice(1, -1) : rawFinal;
+        out.push({ raw: rawFinal, trimmed: rawFinal, quoted, innerRaw });
       }
       return out;
     }
 
-    function splitFieldsRobust(tupleRaw){
-      if (typeof window.splitFieldsRobust === 'function') return window.splitFieldsRobust(tupleRaw);
-      // Fallback: split on commas outside quotes within ( ... )
-      const inner = tupleRaw.trim().replace(/^\(|\)$/g,'');
-      const parts = [];
-      let buf = '';
-      let inStr = false;
-      for (let i=0;i<inner.length;i++){
-        const ch = inner[i];
-        if (inStr){
-          if (ch === '\\'){ buf += ch; i++; if (i<inner.length) buf += inner[i]; continue; }
-          if (ch === "'"){
-            if (inner[i+1] === "'") { buf += "''"; i++; continue; }
-            inStr = false; buf += ch; continue;
+    // Rule (2): Lone apostrophe detection
+    // Accepts either doubled quotes '' OR a backslash escape before the apostrophe
+    // (Handles odd/even backslashes correctly.)
+    function hasUnescapedApostropheSQL_AllowBackslash(innerRaw){
+      for (let i = 0; i < innerRaw.length; i++){
+        const ch = innerRaw[i];
+        if (ch !== "'") continue;
+
+        // SQL doubled quote check: '' → skip both and continue
+        if (innerRaw[i+1] === "'") { i++; continue; }
+
+        // Backslash-escape check: count consecutive backslashes immediately before this apostrophe
+        let bs = 0, j = i - 1;
+        while (j >= 0 && innerRaw[j] === '\\') { bs++; j--; }
+        if (bs % 2 === 1) { // odd → apostrophe is escaped by backslash
+          continue;
+        }
+
+        // Otherwise this is a lone apostrophe → unescaped
+        return true;
+      }
+      return false;
+    }
+
+    function scan(){
+      const lines = getLines();
+      const err1 = [], err2 = [], err3 = [];
+      const counts = [];
+
+      for (let li = 0; li < lines.length; li++){
+        const line = lines[li];
+        if (!line.trim()) continue;
+        const tuples = findAllTuples(line);
+        if (!tuples.length) continue;
+
+        for (let ti = 0; ti < tuples.length; ti++){
+          const t = tuples[ti];
+          const fields = parseFieldsWithMeta(t.raw);
+          if (!fields.length) continue;
+
+          counts.push({ count: fields.length, lineIndex: li });
+
+          for (let fi = 0; fi < fields.length; fi++){
+            const f = fields[fi];
+            const raw = f.trimmed;
+
+            // (1) Unquoted string (non-numeric, non-null, non-empty, not quoted)
+            if (!isNumericLiteral(raw) && !isNullishLiteral(raw) && raw !== '' && !f.quoted){
+              push(err1, `Unquoted string field at field ${fi+1}`, li, ti+1, fi+1);
+              continue;
+            }
+
+            if (f.quoted){
+              // (2) Unescaped apostrophe (now allows \')
+              if (hasUnescapedApostropheSQL_AllowBackslash(f.innerRaw)){
+                push(err2, `Unescaped apostrophe in field ${fi+1}`, li, ti+1, fi+1);
+              }
+              // (3) Wrong slash escape — forward slash before apostrophe
+              if (/\/'/.test(f.innerRaw)){
+                push(err3, `Wrong slash escape (/' ) in field ${fi+1}`, li, ti+1, fi+1);
+              }
+            }
           }
-          buf += ch; continue;
-        } else {
-          if (ch === "'") { inStr = true; buf += ch; continue; }
-          if (ch === ','){ parts.push(buf.trim()); buf=''; continue; }
-          buf += ch; continue;
         }
       }
-      if (buf.length) parts.push(buf.trim());
-      return parts;
-    }
 
-    function replaceNthFieldInFirstTuple(line, n1, value){
-      const tuples = findAllTuplesInLineSmart(line);
-      if (!tuples.length) return line;
-      const t = tuples[0];
-      const before = line.slice(0, t.open);
-      const after  = line.slice(t.close);
-      const parts  = splitFieldsRobust(t.raw);
-
-      const idx0 = (n1|0) - 1;
-      if (idx0 < 0 || idx0 >= parts.length) return line;
-
-      const target = (parts[idx0]||'').trim();
-      const asString = String(value);
-      const safeVal = isQuoted(target) ? `'${asString.replace(/'/g, "''")}'` : asString;
-      parts[idx0] = safeVal;
-      return before + joinFields(parts) + after;
-    }
-
-    function getCurrentSet(){
-      const content = editor.value;
-      const caret   = editor.selectionStart ?? 0;
-      const info    = getLineIndexAndColumn(content, caret);
-      const { start, end } = expandToSetBounds(info.lines, info.lineIndex);
-      return { lines: info.lines, start, end };
-    }
-
-    function getMethod2Items(){
-      const raw = (altListEl?.value ?? '').trim();
-      if (!raw) return [];
-      return raw.split(/\r?\n/).map(s=>s.trim()).filter(Boolean);
-    }
-
-    function getMethod1Items(){
-      return Array.isArray(window.collectedItems) ? window.collectedItems : [];
-    }
-
-    function getSourceItems(){
-      const m2 = getMethod2Items();
-      return m2.length ? m2 : getMethod1Items();
-    }
-
-    function appendWithSingleBlank(doc, block){
-      const trimmed = doc.replace(/\s+$/,'');
-      return trimmed + '\n\n' + block;
-    }
-
-    // ---- single-fire helpers ----
-    function bindSingleClick(btn, handler){
-      // Replace node to strip any pre-existing listeners
-      const fresh = btn.cloneNode(true);
-      btn.parentNode.replaceChild(fresh, btn);
-      let busy = false;
-      fresh.addEventListener('click', (ev) => {
-        if (busy) return; // prevent accidental double-fire
-        busy = true;
-        try { handler(ev); }
-        finally { setTimeout(()=>{ busy = false; }, 0); }
-      });
-      return fresh;
-    }
-
-    function openModal(){
-      try { window.closeAll?.(); } catch {}
-      modal.style.display = 'flex';
-      // Focus first input for UX
-      try { fieldInput?.focus(); } catch {}
-    }
-    function closeModal(){ modal.style.display = 'none'; }
-
-    // ---- bind buttons once (duplicate-safe) ----
-    const applyHandler = () => {
-      const fieldN = Number(fieldInput.value);
-      if (!Number.isInteger(fieldN) || fieldN < 1) { alert('Enter a valid 1-based field index (\u2265 1).'); return; }
-
-      const items = getSourceItems();
-      if (!items.length) { alert('No items found. Use Copy Board (Method 1) or paste a one-per-line list (Method 2).'); return; }
-
-      const { lines, start, end } = getCurrentSet();
-      if (start === end) { alert('No active set at caret. Place caret inside a non-blank block.'); return; }
-
-      const baseSet = lines.slice(start, end);
-      const outputs = [];
-      for (const item of items) {
-        const copy = baseSet.map(line => replaceNthFieldInFirstTuple(line, fieldN, item));
-        outputs.push(copy.join('\n'));
+      // (4) Majority field count (skip if any err1)
+      const err4 = [];
+      if (err1.length === 0 && counts.length){
+        const tally = new Map();
+        for (const c of counts) tally.set(c.count, (tally.get(c.count)||0)+1);
+        let mode = null, hits = -1;
+        for (const [cnt, n] of tally) { if (n > hits) { hits = n; mode = cnt; } }
+        for (const c of counts) if (c.count !== mode) err4.push({ msg:`Field count error (found ${c.count}, expected ${mode})`, lineIndex:c.lineIndex });
       }
 
-      const block = outputs.join(sepChk && sepChk.checked ? '\n\n' : '\n');
-      editor.value = appendWithSingleBlank(editor.value, block);
+      return { err1, err2, err3, err4 };
+    }
 
-      const caret = editor.selectionStart ?? editor.value.length;
-      editor.setSelectionRange(caret, caret);
+    function render({ err1, err2, err3, err4 }){
+      listEl.innerHTML = '';
+      const ordered = [...err1, ...err2, ...err3, ...err4];
+      if (!ordered.length){
+        if (summary) summary.textContent = 'No errors found';
+        const li = document.createElement('li');
+        li.className = 'eh-item';
+        li.innerHTML = `<span class="eh-badge">OK</span>
+                        <div class="eh-msg">No problems detected.</div>
+                        <div class="eh-loc"></div>`;
+        listEl.appendChild(li);
+        return;
+      }
+      if (summary) summary.textContent = `${ordered.length} error${ordered.length===1?'':'s'}`;
+      for (const it of ordered){
+        const li = document.createElement('li');
+        li.className = 'eh-item';
+        li.innerHTML = `<span class="eh-badge error">Error</span>
+                        <div class="eh-msg">${escapeHtml(it.msg)}</div>
+                        <div class="eh-loc">${it.lineIndex!=null ? `line ${it.lineIndex+1}` : ''}${it.tupleNo?` · tuple ${it.tupleNo}`:''}${it.fieldNo?` · field ${it.fieldNo}`:''}</div>`;
+        listEl.appendChild(li);
+      }
+    }
 
-      try { window.pushSnapshot?.(); } catch {}
-      try { window.updateRowsCountPill?.(); } catch {}
-      try { window.updateBoardView?.(); } catch {}
+    const runScan = debounce(() => {
+      if (scanning) return;
+      scanning = true;
+      try { render(scan()); }
+      finally { scanning = false; }
+    }, 140);
 
-      closeModal();
-    };
+    // Wire controls
+    const openModal  = () => { runScan(); modal.style.display = 'flex'; };
+    const closeModal = () => { modal.style.display = 'none'; };
 
-    // Replace and bind buttons to guarantee single listener
-    const applyBtnBound  = bindSingleClick(applyBtn, applyHandler);
-    const cancelBtnBound = bindSingleClick(cancelBtn, () => closeModal());
+    if (btnOpen)   btnOpen.addEventListener('click', openModal);
+    if (btnRescan) btnRescan.addEventListener('click', runScan);
+    if (btnClose)  btnClose.addEventListener('click', closeModal);
+    modal.addEventListener('click', (e) => { if (e.target === modal) closeModal(); });
 
-    // Outer modal interactions
-    // Ensure open is bound once
-    (function bindOpenOnce(){
-      const freshOpen = openBtn.cloneNode(true);
-      openBtn.parentNode.replaceChild(freshOpen, openBtn);
-      freshOpen.addEventListener('click', openModal);
-    })();
-
-    // Click outside to close (duplicate-safe)
-    (function bindOverlayOnce(){
-      const handler = (e) => { if (e.target === modal) closeModal(); };
-      const fresh = modal.cloneNode(true);
-      // Preserve inner HTML when cloning the entire modal would drop children; instead, don't replace modal.
-      // Simpler approach: remove any previous same handler by storing a symbol-keyed flag.
-    })();
-
-    // ESC to close (bind once)
-    (function bindEscOnce(){
-      if (window.__tm_esc_bound) return; window.__tm_esc_bound = true;
-      document.addEventListener('keydown', (e) => {
-        if (modal.style.display === 'flex' && e.key === 'Escape') closeModal();
-      });
-    })();
-
+    // Hotkey (as documented): Ctrl+Shift+U
+    document.addEventListener('keydown', (e) => {
+      const meta = e.ctrlKey || e.metaKey;
+      if (meta && e.shiftKey && (e.key === 'u' || e.key === 'U')){
+        e.preventDefault();
+        openModal();
+      }
+    });
   });
 })();
 </script>
