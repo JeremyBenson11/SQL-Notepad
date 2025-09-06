@@ -1,5 +1,11 @@
 Sep 4th, 2025
 
+* Added a paste feature for type of 'verticle field dumping.'
+* Debugging changed, but shoddy and errenous. Probably give up on this until a new GPT model or human editor comes along.
+* Software stumbles most of features when encountering escaped apostrophes. Just do these tuples by hand, and keep a close eye on data and work.
+
+Sep 4th, 2025
+
 * Added Ctrl+K hoykey - coppies current field across tuples in set.
 * Update Template Maker - now both methods are working.
 * Debugged Debugger a bit - still working like garbage, shoddy debugging, with errors.
