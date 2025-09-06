@@ -424,6 +424,14 @@ body.interface-hidden textarea#textArea { margin-left: 12px; }
 #template-maker-modal .title { margin-bottom: 6px; }
 #template-maker-modal .dialog .hint { margin-bottom: 10px; }
 
+#field-paste-modal .title { margin-bottom: 6px; }
+#field-paste-modal .hint { margin-bottom: 8px; }
+#field-paste-modal input[type="number"],
+#field-paste-modal input[type="text"]{
+padding: 8px; border-radius: 8px; border: 1px solid var(--border);
+background: var(--editor); color: var(--fg);
+}
+
 /* Show the safety button when hidden */
 body.interface-hidden #showControlsBtn { display: inline-block; }
 
@@ -465,13 +473,14 @@ body.interface-hidden #showControlsBtn { display: inline-block; }
             <li><button id="mnuFieldSet"    role="menuitem">Set Field</button></li>
 			<li><button id="mnuFieldSwapper" role="menuitem">Swapper</button></li>
 			<li><button id="mnuFieldAppendPrepend" role="menuitem">Append/Prepend</button></li>
+			<li><button id="mnuFieldPaste" role="menuitem">Paste</button></li>
           </ul>
         </li>
 
         <li class="appmenu-sep" aria-hidden="true"></li>
         <li><button id="mnuListExtractor" role="menuitem">List Extractor</button></li>
 		<li><button id="mnuTemplateMaker" role="menuitem">Template Maker</button></li>
-		<li><button id="mnuErrorHandling" role="menuitem">Debugging</button></li>
+		<li><button id="mnuErrorHandling" role="menuitem">Debugger</button></li>
       </ul>
     </li>
 
@@ -1145,24 +1154,22 @@ function splitFieldsRobust(tupleRaw) {
 
   for (let i = 0; i < inner.length; i++) {
     const ch = inner[i];
-
     if (ch === "'") {
       if (inQuote) {
-        if (inner[i - 1] === '\\') {
-          buf += ch;
-        } else if (inner[i + 1] === "'") {
-          buf += "''"; i++;
+        if (inner[i + 1] === "'") { // doubled apostrophe inside string
+          buf += "''";
+          i++;
         } else {
-          inQuote = false; buf += ch;
+          inQuote = false;
+          buf += ch;
         }
       } else {
-        inQuote = true; buf += ch;
+        inQuote = true;
+        buf += ch;
       }
-    } else if (ch === '\\' && inQuote) {
-      buf += ch;
-      if (i + 1 < inner.length) { buf += inner[i + 1]; i++; }
     } else if (!inQuote && ch === ',') {
-      parts.push(buf.trim()); buf = '';
+      parts.push(buf.trim());
+      buf = '';
     } else {
       buf += ch;
     }
@@ -1170,6 +1177,7 @@ function splitFieldsRobust(tupleRaw) {
   parts.push(buf.trim());
   return parts;
 }
+
 function joinFields(parts) { return '(' + parts.join(', ') + ')'; }
 function isQuoted(str) { const t = str.trim(); return t.startsWith("'") && t.endsWith("'"); }
 
@@ -3443,121 +3451,6 @@ document.addEventListener('DOMContentLoaded', () => {
   });
 });
 </script>
-<script id="template-maker-plugin">
-document.addEventListener('DOMContentLoaded', () => {
-  // Elements
-  const modal   = document.getElementById('template-maker-modal');
-  const openBtn = document.getElementById('mnuTemplateMaker');
-  if (!modal || !openBtn) return; // HTML missing? abort quietly
-
-  const fieldInput = document.getElementById('tmFieldIndex');
-  const sepChk     = document.getElementById('tmSepBlank');
-  const applyBtn   = document.getElementById('tmApplyBtn');
-  const cancelBtn  = document.getElementById('tmCancelBtn');
-  const altListEl  = document.getElementById('tmListAlt');
-
-  // --- helpers ---
-  function replaceNthFieldInFirstTuple(line, n1, value) {
-    const tuples = findAllTuplesInLineSmart(line);
-    if (!tuples.length) return line;
-    const t = tuples[0];
-    const before = line.slice(0, t.open);
-    const after  = line.slice(t.close);
-    const parts  = splitFieldsRobust(t.raw);
-
-    const idx0 = (n1|0) - 1;
-    if (idx0 < 0 || idx0 >= parts.length) return line;
-
-    const target = parts[idx0];
-    // If destination is quoted, escape inner single quotes by doubling them
-    const v = isQuoted(target) ? `'${String(value).replace(/'/g, "''")}'` : String(value);
-    parts[idx0] = v;
-    return before + joinFields(parts) + after;
-  }
-
-  function getCurrentSetBounds() {
-    const content = textArea.value;
-    const caret   = textArea.selectionStart ?? 0;
-    const info    = getLineIndexAndColumn(content, caret);
-    const lines   = info.lines;
-    const { start, end } = expandToSetBounds(lines, info.lineIndex, info.lineIndex);
-    return { lines, start, end };
-  }
-
-  function getMethod2Items() {
-    const raw = (altListEl?.value ?? '').trim();
-    if (!raw) return [];
-    return raw.split(/\r?\n/).map(s => s.trim()).filter(Boolean);
-  }
-
-  function getMethod1Items() {
-    // falls back to your already-collected Copy Board items
-    // (collectedItems is provided by your board logic)
-    return Array.isArray(collectedItems) ? collectedItems : [];
-  }
-
-  function getSourceItems() {
-    // Prefer Method 2 when textarea is non-empty; otherwise use Copy Board (Method 1)
-    const m2 = getMethod2Items();
-    if (m2.length > 0) return m2;
-    return getMethod1Items();
-  }
-
-  function applyTemplate() {
-    const fieldN = Number(fieldInput.value);
-    if (!Number.isInteger(fieldN) || fieldN < 1) {
-      alert('Enter a valid 1-based field index (≥ 1).');
-      return;
-    }
-
-    const items = getSourceItems();
-    if (!Array.isArray(items) || items.length === 0) {
-      alert('No items found. Add items to Copy Board (Method 1) or paste a one-per-line list (Method 2).');
-      return;
-    }
-
-    const { lines, start, end } = getCurrentSetBounds();
-    if (start === end) { alert('No active set at caret. Place caret inside a block.'); return; }
-
-    const baseSet = lines.slice(start, end);
-    const outputs = [];
-    for (const item of items) {
-      const copy = baseSet.map(line => replaceNthFieldInFirstTuple(line, fieldN, item));
-      outputs.push(copy.join('\n'));
-    }
-
-    // Build final block; keep user’s "blank line between copies" setting
-    const block = outputs.join(sepChk && sepChk.checked ? '\n\n' : '\n');
-
-    // Append after the document's last set with EXACTLY one blank line separation
-    let doc = textArea.value.replace(/\s+$/, '');
-    textArea.value = doc + '\n\n' + block;
-
-    const caret = textArea.selectionStart ?? textArea.value.length;
-    textArea.setSelectionRange(caret, caret);
-
-    try { pushSnapshot(); } catch {}
-    try { updateRowsCountPill(); } catch {}
-    try { updateBoardView(); } catch {}
-  }
-
-  // --- modal wiring ---
-  function openModal() {
-    try { window.closeAll?.(); } catch {}
-    modal.style.display = 'flex';
-    setTimeout(() => fieldInput?.focus(), 0);
-  }
-  function closeModal() { modal.style.display = 'none'; }
-
-  openBtn.addEventListener('click', openModal);
-  applyBtn.addEventListener('click', () => { applyTemplate(); closeModal(); });
-  cancelBtn.addEventListener('click', closeModal);
-  modal.addEventListener('click', (e) => { if (e.target === modal) closeModal(); });
-  document.addEventListener('keydown', (e) => {
-    if (modal.style.display === 'flex' && e.key === 'Escape') closeModal();
-  });
-});
-</script>
 <!-- Append/Prepend Modal -->
 <div class="overlay" id="append-prepend-modal" aria-modal="true" role="dialog">
   <div class="dialog">
@@ -3657,6 +3550,41 @@ document.addEventListener('DOMContentLoaded', () => {
       <button id="tmCloseBtn">Close</button>
     </div>
   </div>
+</div>
+<!-- 2) MODAL (can be placed alongside your other modals) -->
+<div class="overlay" id="field-paste-modal" aria-modal="true" role="dialog">
+  <div class="dialog">
+    <div class="title">Field → Paste</div>
+    <div class="hint">Choose a mode, set scope (<code>doc</code> or set #), and provide a literal field list. <b>Literals are inserted verbatim</b>.</div>
+    <div class="row" style="gap:12px;align-items:center;flex-wrap:wrap">
+      <label style="display:flex;align-items:center;gap:6px">
+        <input type="radio" name="fp_mode" id="fp_mode_insert" value="insert" checked>
+        Insert after #
+      </label>
+      <input type="number" id="fp_after" min="0" value="0" style="width:90px;">
+      <label style="display:flex;align-items:center;gap:6px;margin-left:16px">
+        <input type="radio" name="fp_mode" id="fp_mode_overwrite" value="overwrite">
+        Overwrite fields X–Y
+      </label>
+      <input type="number" id="fp_from" min="1" value="1" style="width:90px;">
+      <span>to</span>
+      <input type="number" id="fp_to" min="1" value="1" style="width:90px;">
+      <label style="margin-left:16px">Scope
+        <input type="text" id="fp_scope" placeholder="doc or set #" style="width:140px;">
+      </label>
+    </div>
+    <div class="row">
+      <label style="flex:1">Literal to insert / overwrite with
+        <input type="text" id="fp_value" placeholder="e.g. 'apple', 'resources', 'JUlakjdfEEzaA'" style="width:100%">
+      </label>
+    </div>
+    <div class="hint">For <b>Insert</b>: value is inserted as a single field verbatim. For <b>Overwrite</b>: you may provide <em>one or more fields</em> separated by commas (outside quotes) — they replace X..Y. Backslashes and sequences like <code>\'</code> are preserved.</div>
+    <div class="btns">
+      <button id="fp_cancel">Cancel</button>
+      <button id="fp_apply" class="primary">Apply</button>
+    </div>
+  </div>
+</div>
 </div>
 <script id="template-maker-plugin">
 /**
@@ -4113,251 +4041,400 @@ document.addEventListener('DOMContentLoaded', () => {
 </script>
 <script id="error-handling-plugin">
 /**
- * Error Handling — v3 (WORKING)
- * Changes requested:
- *  - Accept backslash-escaped apostrophes inside quoted strings: \'  (no error #2)
- *  - Keep strict SQL doubled-quote escaping valid: '' (no error #2)
- *  - Flag FORWARD slash before apostrophe as wrong escape: /' (error #3)
+ * Error Handling — v13 (apostrophe‑only, robust scanner)
  *
- * Modal:   #error-handling-modal
- * List:    #ehList
- * Order (strict):
- *   (1) Unquoted string field
- *   (2) Unescaped apostrophe inside quoted field (must be '' OR \")
- *   (3) Wrong slash escape inside quoted field (detect /')
- *   (4) Field count majority (skipped if any (1) exists)
+ * Matrix (desired):
+ *  'man/'s'  → E2
+ *  'man\'s' → E3
+ *  'man's'  → E2
+ *  'man''s' → OK
  */
 (() => {
   document.addEventListener('DOMContentLoaded', () => {
-    // SINGLE-FIRE GUARD
-    if (window.__eh_single_init__) return;
-    window.__eh_single_init__ = true;
+    if (window.__eh_v13_initialized__) return;
+    window.__eh_v13_initialized__ = true;
 
+    // --- DOM ---
+    const btnOpen   = document.getElementById('mnuErrorHandling');
     const modal     = document.getElementById('error-handling-modal');
     const listEl    = document.getElementById('ehList');
-    const summary   = document.getElementById('ehSummary');
+    const summaryEl = document.getElementById('ehSummary');
     const btnRescan = document.getElementById('ehRescanBtn');
     const btnClose  = document.getElementById('ehCloseBtn');
-    const btnOpen   = document.getElementById('mnuErrorHandling');
-    const editor    = window.textArea || document.getElementById('textArea');
+    const editor    = document.getElementById('textArea');
+    if (!btnOpen || !modal || !listEl || !summaryEl || !btnRescan || !btnClose || !editor) return;
 
-    if (!modal || !listEl || !editor) return;
+    const setModal = (on) => { modal.style.display = on ? 'flex' : 'none'; };
+    const safeHTML = (s) => String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
 
-    // Debounce (correct syntax)
-    let debounceTimer = null, scanning = false;
-    const debounce = (fn, ms) => (...args) => {
-      clearTimeout(debounceTimer);
-      debounceTimer = setTimeout(() => fn(...args), ms);
-    };
+    const enumerateSets = (lines) => (typeof window.enumerateSets === 'function') ? window.enumerateSets(lines) : fallbackEnumerateSets(lines);
+    function fallbackEnumerateSets(lines){
+      const out = []; let i = 0; const N = lines.length;
+      while (i < N){ while (i < N && lines[i].trim() === '') i++; if (i >= N) break; const start = i; while (i < N && lines[i].trim() !== '') i++; out.push({ start, end:i }); }
+      return out;
+    }
 
-    // Prefer app tuple finder; otherwise fallback
-    const appFind = (line) => (typeof window.findAllTuplesInLineSmart === 'function')
-      ? window.findAllTuplesInLineSmart(line)
-      : null;
-
-    function fallbackFind(line){
-      const tuples = [];
-      let inQ = false;
+    // ==============================
+    // Apostrophe‑only structural parsers (ignore backslashes structurally)
+    // ==============================
+    function findAllTuples_AO(line){
+      const out = []; let depth = 0, start = -1, inQ = false;
       for (let i = 0; i < line.length; i++){
         const ch = line[i];
         if (ch === "'"){
           if (inQ){ if (line[i+1] === "'") { i++; } else { inQ = false; } }
           else { inQ = true; }
-        } else if (!inQ && ch === '('){
-          const start = i; let j = i+1; let depth = 1; let q = false;
-          for (; j < line.length; j++){
-            const c = line[j];
-            if (c === "'"){
-              if (q){ if (line[j+1] === "'") { j++; } else { q = false; } }
-              else { q = true; }
-            } else if (!q){
-              if (c === '(') depth++;
-              else if (c === ')'){ depth--; if (depth === 0){ tuples.push({ open:start, close:j+1, raw: line.slice(start, j+1) }); i = j; break; } }
-            }
-          }
+        } else if (!inQ){
+          if (ch === '('){ if (depth === 0) start = i; depth++; }
+          else if (ch === ')'){ depth--; if (depth === 0 && start >= 0){ out.push({ open:start, close:i+1, raw: line.slice(start, i+1) }); start = -1; } }
         }
-      }
-      return tuples;
-    }
-
-    const findAllTuples = (line) => appFind(line) ?? fallbackFind(line);
-
-    // Utils
-    const getLines = () => (editor.value || '').replace(/\r/g,'').split('\n');
-    const isNumericLiteral = (s) => /^-?\d+(?:\.\d+)?$/.test(s);
-    const isNullishLiteral = (s) => /^(null)$/i.test(s);
-
-    function escapeHtml(s){
-      return String(s)
-        .replace(/&/g,'&amp;')
-        .replace(/</g,'&lt;')
-        .replace(/>/g,'&gt;')
-        .replace(/\"/g,'&quot;')
-        .replace(/'/g,'&#39;');
-    }
-    function push(arr, msg, lineIndex, tupleNo, fieldNo){ arr.push({ msg, lineIndex, tupleNo, fieldNo }); }
-
-    // Quote-aware field parser → [{ raw, trimmed, quoted, innerRaw }]
-    function parseFieldsWithMeta(tupleRaw){
-      const open = tupleRaw.indexOf('(');
-      const close = tupleRaw.lastIndexOf(')');
-      if (open === -1 || close === -1 || close <= open) return [];
-      const inner = tupleRaw.slice(open+1, close);
-
-      const out = [];
-      let buf = '';
-      let inQ = false;
-      for (let i = 0; i < inner.length; i++){
-        const ch = inner[i];
-        if (ch === "'"){
-          if (inQ){
-            if (inner[i+1] === "'") { buf += "''"; i++; }
-            else { inQ = false; buf += "'"; }
-          } else { inQ = true; buf += "'"; }
-        } else if (!inQ && ch === ','){
-          const raw = buf.trim();
-          const quoted = raw.startsWith("'") && raw.endsWith("'");
-          const innerRaw = quoted ? raw.slice(1, -1) : raw;
-          out.push({ raw, trimmed: raw, quoted, innerRaw });
-          buf = '';
-        } else { buf += ch; }
-      }
-      const rawFinal = buf.trim();
-      if (rawFinal.length || inner.endsWith(',')){
-        const quoted = rawFinal.startsWith("'") && rawFinal.endsWith("'");
-        const innerRaw = quoted ? rawFinal.slice(1, -1) : rawFinal;
-        out.push({ raw: rawFinal, trimmed: rawFinal, quoted, innerRaw });
       }
       return out;
     }
 
-    // Rule (2): Lone apostrophe detection
-    // Accepts either doubled quotes '' OR a backslash escape before the apostrophe
-    // (Handles odd/even backslashes correctly.)
-    function hasUnescapedApostropheSQL_AllowBackslash(innerRaw){
-      for (let i = 0; i < innerRaw.length; i++){
-        const ch = innerRaw[i];
-        if (ch !== "'") continue;
+    function splitFields_AO(tupleRaw){
+      const inner = tupleRaw.slice(1, -1);
+      const parts = []; let buf = '', inQ = false;
+      for (let i = 0; i < inner.length; i++){
+        const ch = inner[i];
+        if (ch === "'"){
+          if (inQ){ if (inner[i+1] === "'") { buf += "''"; i++; } else { buf += "'"; } }
+          else { inQ = true; buf += "'"; }
+        } else if (!inQ && ch === ','){ parts.push(buf.trim()); buf = ''; }
+        else { buf += ch; }
+      }
+      parts.push(buf.trim());
+      return parts;
+    }
 
-        // SQL doubled quote check: '' → skip both and continue
-        if (innerRaw[i+1] === "'") { i++; continue; }
+    const isQuoted = (s) => { const t = String(s).trim(); return t.startsWith("'") && t.endsWith("'"); };
+    const looksStringy = (t) => /[A-Za-z']/u.test(String(t));
 
-        // Backslash-escape check: count consecutive backslashes immediately before this apostrophe
-        let bs = 0, j = i - 1;
-        while (j >= 0 && innerRaw[j] === '\\') { bs++; j--; }
-        if (bs % 2 === 1) { // odd → apostrophe is escaped by backslash
-          continue;
+    // --- Robust inner scanners ---
+    function hasBackslashApos(inner){
+      // Normalize curly apostrophes to straight for consistency, but backslash check uses raw
+      return inner.indexOf("\'") !== -1;
+    }
+
+    function hasUndoubledApos(inner){
+      // Normalize Unicode right single quotes to ASCII apostrophe
+      const s = inner.replace(/’/g, "'");
+      for (let i = 0; i < s.length; i++){
+        const ch = s[i];
+        if (ch === "'"){
+          if (s[i+1] === "'") { i++; continue; } // skip a doubled pair
+          return true; // lone apostrophe
         }
-
-        // Otherwise this is a lone apostrophe → unescaped
-        return true;
       }
       return false;
     }
 
-    function scan(){
-      const lines = getLines();
-      const err1 = [], err2 = [], err3 = [];
-      const counts = [];
+    function scanField_AO(fieldText){
+      const t = String(fieldText).trim();
+      const out = [];
+      if (looksStringy(t) && !isQuoted(t)){
+        out.push({ sev:'error', code:'E1', msg: 'Unquoted/Unclosed string field (must be wrapped in single quotes)' });
+        return out;
+      }
+      if (isQuoted(t)){
+        const inner = t.slice(1, -1);
+        if (hasBackslashApos(inner)) out.push({ sev:'error', code:'E3', msg: `Backslash escape (\') is not allowed. Use doubled apostrophe ('')` });
+        if (hasUndoubledApos(inner)) out.push({ sev:'error', code:'E2', msg: `Unescaped apostrophe inside quoted string; use doubled apostrophe ('')` });
+      }
+      return out;
+    }
 
+    function* iterateAllTuples_AO(lines){
       for (let li = 0; li < lines.length; li++){
-        const line = lines[li];
-        if (!line.trim()) continue;
-        const tuples = findAllTuples(line);
-        if (!tuples.length) continue;
+        const line = lines[li]; if (!line.trim()) continue;
+        const tuples = findAllTuples_AO(line);
+        for (let ti = 0; ti < tuples.length; ti++) yield { li, ti, tuple: tuples[ti] };
+      }
+    }
 
-        for (let ti = 0; ti < tuples.length; ti++){
-          const t = tuples[ti];
-          const fields = parseFieldsWithMeta(t.raw);
-          if (!fields.length) continue;
+    function analyze(){
+      const lines = editor.value.split(/\r?\n/);
+      const sets  = enumerateSets(lines);
+      const items = []; let totalErr = 0; let totalWarn = 0;
 
-          counts.push({ count: fields.length, lineIndex: li });
-
+      for (let s = 0; s < sets.length; s++){
+        const { start, end } = sets[s];
+        let rowCounter = 0;
+        for (const rec of iterateAllTuples_AO(lines.slice(start, end))){
+          rowCounter++; let { li, tuple } = rec; li = start + li;
+          const raw = tuple.raw;
+          if (!raw || raw[0] !== '(' || raw[raw.length-1] !== ')'){
+            items.push(mkItem('error','E4','Malformed tuple parentheses', s+1, rowCounter, lines[li])); totalErr++; continue;
+          }
+          const fields = splitFields_AO(raw);
           for (let fi = 0; fi < fields.length; fi++){
-            const f = fields[fi];
-            const raw = f.trimmed;
-
-            // (1) Unquoted string (non-numeric, non-null, non-empty, not quoted)
-            if (!isNumericLiteral(raw) && !isNullishLiteral(raw) && raw !== '' && !f.quoted){
-              push(err1, `Unquoted string field at field ${fi+1}`, li, ti+1, fi+1);
-              continue;
-            }
-
-            if (f.quoted){
-              // (2) Unescaped apostrophe (now allows \')
-              if (hasUnescapedApostropheSQL_AllowBackslash(f.innerRaw)){
-                push(err2, `Unescaped apostrophe in field ${fi+1}`, li, ti+1, fi+1);
-              }
-              // (3) Wrong slash escape — forward slash before apostrophe
-              if (/\/'/.test(f.innerRaw)){
-                push(err3, `Wrong slash escape (/' ) in field ${fi+1}`, li, ti+1, fi+1);
-              }
-            }
+            const fieldIssues = scanField_AO(fields[fi]);
+            for (const f of fieldIssues){ if (f.sev === 'error') totalErr++; else totalWarn++; items.push(mkItem(f.sev, f.code, `${f.msg} — field ${fi+1}`, s+1, rowCounter, raw)); }
           }
         }
       }
-
-      // (4) Majority field count (skip if any err1)
-      const err4 = [];
-      if (err1.length === 0 && counts.length){
-        const tally = new Map();
-        for (const c of counts) tally.set(c.count, (tally.get(c.count)||0)+1);
-        let mode = null, hits = -1;
-        for (const [cnt, n] of tally) { if (n > hits) { hits = n; mode = cnt; } }
-        for (const c of counts) if (c.count !== mode) err4.push({ msg:`Field count error (found ${c.count}, expected ${mode})`, lineIndex:c.lineIndex });
-      }
-
-      return { err1, err2, err3, err4 };
+      return { items, totalErr, totalWarn };
     }
 
-    function render({ err1, err2, err3, err4 }){
+    function mkItem(sev, code, msg, setNo, rowNo, sample){ return { sev, code, msg, setNo, rowNo, sample }; }
+
+    function render({ items, totalErr, totalWarn }){
       listEl.innerHTML = '';
-      const ordered = [...err1, ...err2, ...err3, ...err4];
-      if (!ordered.length){
-        if (summary) summary.textContent = 'No errors found';
-        const li = document.createElement('li');
-        li.className = 'eh-item';
-        li.innerHTML = `<span class="eh-badge">OK</span>
-                        <div class="eh-msg">No problems detected.</div>
-                        <div class="eh-loc"></div>`;
-        listEl.appendChild(li);
-        return;
+      summaryEl.textContent = `${totalErr} error${totalErr===1?'':'s'}${totalWarn?`, ${totalWarn} warning${totalWarn===1?'':'s'}`:''}`;
+      if (!items.length){
+        const li = document.createElement('li'); li.className = 'eh-item';
+        li.innerHTML = '<span class="eh-badge">OK</span><div class="eh-msg">No issues found under apostrophe‑only policy.</div><div class="eh-loc"></div>';
+        listEl.appendChild(li); return;
       }
-      if (summary) summary.textContent = `${ordered.length} error${ordered.length===1?'':'s'}`;
-      for (const it of ordered){
-        const li = document.createElement('li');
-        li.className = 'eh-item';
-        li.innerHTML = `<span class="eh-badge error">Error</span>
-                        <div class="eh-msg">${escapeHtml(it.msg)}</div>
-                        <div class="eh-loc">${it.lineIndex!=null ? `line ${it.lineIndex+1}` : ''}${it.tupleNo?` · tuple ${it.tupleNo}`:''}${it.fieldNo?` · field ${it.fieldNo}`:''}</div>`;
-        listEl.appendChild(li);
+      for (const it of items){
+        const li = document.createElement('li'); li.className = 'eh-item';
+        const badge = document.createElement('span'); badge.className = `eh-badge ${it.sev==='error'?'error':'warn'}`; badge.textContent = `${it.sev.toUpperCase()} · ${it.code}`;
+        const msg = document.createElement('div'); msg.className = 'eh-msg'; const sampleBlock = it.sample ? `<div style="opacity:.85;margin-top:4px;font-family:ui-monospace,Menlo,Consolas,monospace;">${safeHTML(it.sample)}</div>` : '';
+        msg.innerHTML = `<b>${safeHTML(it.msg)}</b>${sampleBlock}`;
+        const loc = document.createElement('div'); loc.className = 'eh-loc'; loc.textContent = `Set ${it.setNo} · Row ${it.rowNo}`;
+        li.appendChild(badge); li.appendChild(msg); li.appendChild(loc); listEl.appendChild(li);
       }
     }
 
-    const runScan = debounce(() => {
-      if (scanning) return;
-      scanning = true;
-      try { render(scan()); }
-      finally { scanning = false; }
-    }, 140);
+    const run = () => render(analyze());
 
-    // Wire controls
-    const openModal  = () => { runScan(); modal.style.display = 'flex'; };
-    const closeModal = () => { modal.style.display = 'none'; };
+    // wiring
+    btnOpen.addEventListener('click', () => { setModal(true); run(); });
+    btnRescan.addEventListener('click', run);
+    btnClose.addEventListener('click', () => setModal(false));
+    modal.addEventListener('click', (e) => { if (e.target === modal) setModal(false); });
 
-    if (btnOpen)   btnOpen.addEventListener('click', openModal);
-    if (btnRescan) btnRescan.addEventListener('click', runScan);
-    if (btnClose)  btnClose.addEventListener('click', closeModal);
-    modal.addEventListener('click', (e) => { if (e.target === modal) closeModal(); });
-
-    // Hotkey (as documented): Ctrl+Shift+U
     document.addEventListener('keydown', (e) => {
-      const meta = e.ctrlKey || e.metaKey;
-      if (meta && e.shiftKey && (e.key === 'u' || e.key === 'U')){
-        e.preventDefault();
-        openModal();
+      if (document.activeElement !== editor) return;
+      const k = (e.key||'').toLowerCase();
+      if ((e.ctrlKey || e.metaKey) && e.shiftKey && k === 'u'){ e.preventDefault(); e.stopPropagation(); setModal(true); run(); }
+    }, { passive:false });
+  });
+})();
+</script>
+<!-- =============================
+Tools → Field → Paste Modal
+============================= -->
+<div class="overlay" id="field-paste-modal" aria-modal="true" role="dialog">
+  <div class="dialog">
+    <div class="title">Field → Paste</div>
+    <div class="hint">Choose a mode, set scope (<code>doc</code> or set #), and provide a literal field list. <b>Literals are inserted verbatim</b>.</div>
+
+    <div class="row" style="gap:12px;align-items:center;flex-wrap:wrap">
+      <label style="display:flex;align-items:center;gap:6px">
+        <input type="radio" name="fp_mode" id="fp_mode_insert" value="insert" checked>
+        Insert after #
+      </label>
+      <input type="number" id="fp_after" min="0" value="0" style="width:90px;">
+
+      <label style="display:flex;align-items:center;gap:6px;margin-left:16px">
+        <input type="radio" name="fp_mode" id="fp_mode_overwrite" value="overwrite">
+        Overwrite fields X–Y
+      </label>
+      <input type="number" id="fp_from" min="1" value="1" style="width:90px;">
+      <span>to</span>
+      <input type="number" id="fp_to" min="1" value="1" style="width:90px;">
+
+      <label style="margin-left:16px">Scope
+        <input type="text" id="fp_scope" placeholder="doc or set #" style="width:140px;">
+      </label>
+    </div>
+
+    <div class="row">
+      <label style="flex:1">Literal to insert / overwrite with
+        <input type="text" id="fp_value" placeholder="e.g. 'apple', 'resources', 'JUlakjdfEEzaA'" style="width:100%">
+      </label>
+    </div>
+
+    <div class="hint">For <b>Insert</b>: value is inserted as a single field verbatim. For <b>Overwrite</b>: you may provide <em>one or more fields</em> separated by commas (outside quotes) — they replace X..Y. Backslashes and sequences like <code>\'</code> are preserved.</div>
+
+    <div class="btns">
+      <button id="fp_cancel">Cancel</button>
+      <button id="fp_apply" class="primary">Apply</button>
+    </div>
+  </div>
+</div>
+</div>
+
+<!-- =============================
+Field → Paste Plugin Script
+============================= -->
+<script id="field-paste-plugin">
+(()=>{
+  document.addEventListener('DOMContentLoaded', () => {
+    if (window.__fp_initialized__) return; window.__fp_initialized__ = true;
+
+    // --- DOM hooks (HTML exists; JS handles behavior only) ---
+    const menuBtn  = document.getElementById('mnuFieldPaste');
+    const modal    = document.getElementById('field-paste-modal');
+    const rbInsert = document.getElementById('fp_mode_insert');
+    const rbOver   = document.getElementById('fp_mode_overwrite');
+    const inpAfter = document.getElementById('fp_after');
+    const inpFrom  = document.getElementById('fp_from');
+    const inpTo    = document.getElementById('fp_to');
+    const inpScope = document.getElementById('fp_scope');
+    const inpValue = document.getElementById('fp_value');
+    const btnApply = document.getElementById('fp_apply');
+    const btnCancel= document.getElementById('fp_cancel');
+    const editor   = document.getElementById('textArea');
+
+    if (!menuBtn || !modal || !rbInsert || !rbOver || !inpAfter || !inpFrom || !inpTo || !inpScope || !inpValue || !btnApply || !btnCancel || !editor) return;
+
+    // --- modal helpers ---
+    const openModal  = () => { modal.style.display = 'flex'; setTimeout(() => (rbInsert.checked ? inpAfter : inpFrom).focus(), 0); syncModeUI(); };
+    const closeModal = () => { modal.style.display = 'none'; };
+    const syncModeUI = () => {
+      const ins = rbInsert.checked;
+      inpAfter.disabled = !ins;
+      inpFrom.disabled = inpTo.disabled = ins;
+    };
+    rbInsert.addEventListener('change', syncModeUI);
+    rbOver.addEventListener('change', syncModeUI);
+
+    // --- helpers ---
+    const _enumerateSets = (lines) => (typeof window.enumerateSets === 'function') ? window.enumerateSets(lines) : fallbackEnumerateSets(lines);
+    function fallbackEnumerateSets(lines){
+      const out=[]; let i=0; const N=lines.length;
+      while(i<N){
+        while(i<N && lines[i].trim()==='') i++;
+        if(i>=N) break;
+        const s=i;
+        while(i<N && lines[i].trim()!=='') i++;
+        out.push({start:s,end:i});
       }
+      return out;
+    }
+
+    function fallbackSplitFields(tupleRaw){
+      // Apostrophe-only aware splitter; preserves doubled apostrophes and literal commas inside quotes
+      const inner = tupleRaw.slice(1,-1);
+      const parts=[]; let buf='', inQ=false;
+      for(let i=0;i<inner.length;i++){
+        const ch = inner[i];
+        if (ch === "'"){
+          if (inQ){ if(inner[i+1]==="'"){ buf+="''"; i++; } else { inQ=false; buf+="'"; } }
+          else { inQ=true; buf+="'"; }
+        } else if(!inQ && ch===','){
+          parts.push(buf.trim()); buf='';
+        } else { buf+=ch; }
+      }
+      parts.push(buf.trim());
+      return parts;
+    }
+
+    function joinMinimal(parts){ return '(' + parts.join(', ') + ')'; }
+
+    function parseFieldListLiteral(lit){
+      // Split a raw literal like "'a', 123, null, 'b''b'" into top-level fields (apostrophe-aware)
+      const s = String(lit);
+      const out=[]; let buf='', inQ=false;
+      for (let i=0;i<s.length;i++){
+        const ch = s[i];
+        if (ch === "'"){
+          if (inQ){ if (s[i+1] === "'") { buf+="''"; i++; } else { inQ=false; buf+="'"; } }
+          else { inQ=true; buf+="'"; }
+        } else if (!inQ && ch === ','){
+          out.push(buf.trim()); buf='';
+        } else {
+          buf += ch;
+        }
+      }
+      out.push(buf.trim());
+      return out.filter(x => x.length>0 || x === '');
+    }
+
+    function insertLiteralInTuple(tupleRaw, afterN, literal){
+      const parts = (typeof window.splitFieldsRobust==='function') ? window.splitFieldsRobust(tupleRaw) : fallbackSplitFields(tupleRaw);
+      const insertIndex = Math.max(0, Math.min(parts.length, Number(afterN)||0));
+      parts.splice(insertIndex, 0, String(literal));
+      return (typeof window.joinFields === 'function') ? window.joinFields(parts) : joinMinimal(parts);
+    }
+
+    function overwriteRangeInTuple(tupleRaw, fromIdx1, toIdx1, literal){
+      const parts = (typeof window.splitFieldsRobust==='function') ? window.splitFieldsRobust(tupleRaw) : fallbackSplitFields(tupleRaw);
+      const n = parts.length;
+      const start = Math.max(1, Math.min(n, Number(fromIdx1)||1)) - 1; // 0-based
+      const end   = Math.max(1, Math.min(n, Number(toIdx1)||start+1)) - 1; // inclusive
+      const count = Math.max(0, end - start + 1);
+      const replacement = parseFieldListLiteral(literal);
+      parts.splice(start, count, ...replacement);
+      return (typeof window.joinFields === 'function') ? window.joinFields(parts) : joinMinimal(parts);
+    }
+
+    function applyPaste(afterN, scopeText, literal){
+      const content = editor.value;
+      const lines = content.split(/\r?\n/);
+      const sets = _enumerateSets(lines);
+
+      // Scope: whole doc by default
+      let range = {start:0, end:lines.length};
+      const trimmed = String(scopeText||'').trim().toLowerCase();
+      if (trimmed && trimmed !== 'doc'){
+        const n = parseInt(trimmed, 10);
+        if (Number.isFinite(n) && n >= 1 && n <= sets.length){
+          range = sets[n-1];
+        } else {
+          alert('Scope must be "doc" or a valid set number (1..'+sets.length+').');
+          return;
+        }
+      }
+
+      const isInsert = rbInsert.checked;
+
+      for (let li = range.start; li < range.end; li++){
+        const line = lines[li];
+        if (!line.trim()) continue;
+        const tuples = (typeof window.findAllTuplesInLineSmart==='function') ? window.findAllTuplesInLineSmart(line) : [];
+        if (!tuples || !tuples.length) continue;
+
+        let out = line;
+        // Replace right-to-left so indices remain valid
+        for (let t = tuples.length - 1; t >= 0; t--){
+          const tp = tuples[t];
+          const before = out.slice(0, tp.open);
+          const after  = out.slice(tp.close);
+          const replaced = isInsert
+            ? insertLiteralInTuple(tp.raw, afterN, literal)
+            : overwriteRangeInTuple(tp.raw, Number(inpFrom.value), Number(inpTo.value), literal);
+          out = before + replaced + after;
+        }
+        lines[li] = out;
+      }
+
+      editor.value = lines.join('\n');
+      if (typeof window.pushSnapshot === 'function') window.pushSnapshot();
+      if (typeof window.updateRowsCountPill === 'function') window.updateRowsCountPill();
+    }
+
+    // --- wiring ---
+    const open = () => { modal.style.display = 'flex'; setTimeout(() => (rbInsert.checked ? inpAfter : inpFrom).focus(), 0); syncModeUI(); };
+    const close = () => { modal.style.display = 'none'; };
+
+    menuBtn.addEventListener('click', open);
+    btnCancel.addEventListener('click', close);
+    modal.addEventListener('click', (e) => { if (e.target === modal) close(); });
+
+    btnApply.addEventListener('click', () => {
+      const afterN  = Number(inpAfter.value);
+      if (rbInsert.checked){
+        if (!Number.isInteger(afterN) || afterN < 0){ alert('After field # must be an integer ≥ 0.'); return; }
+      } else {
+        const X = Number(inpFrom.value), Y = Number(inpTo.value);
+        if (!Number.isInteger(X) || !Number.isInteger(Y) || X < 1 || Y < 1){ alert('X and Y must be integers ≥ 1.'); return; }
+      }
+      const scope   = inpScope.value || 'doc';
+      const literal = inpValue.value ?? '';
+      applyPaste(afterN, scope, literal);
+      close();
     });
+
+    // Keyboard helpers inside modal
+    for (const el of [inpAfter, inpFrom, inpTo, inpScope, inpValue]){
+      el.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter') { e.preventDefault(); btnApply.click(); }
+        if (e.key === 'Escape'){ e.preventDefault(); btnCancel.click(); }
+      });
+    }
   });
 })();
 </script>
