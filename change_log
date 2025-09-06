@@ -1,6 +1,6 @@
 Sep 4th, 2025
 
-* Added a paste feature for type of 'verticle field dumping.'
+* Added a paste feature for type of 'horizontal field dumping.'
 * Debugging changed, but shoddy and errenous. Probably give up on this until a new GPT model or human editor comes along.
 * Software stumbles most of features when encountering escaped apostrophes. Just do these tuples by hand, and keep a close eye on data and work.
 
