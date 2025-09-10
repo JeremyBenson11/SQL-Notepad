@@ -432,6 +432,13 @@ padding: 8px; border-radius: 8px; border: 1px solid var(--border);
 background: var(--editor); color: var(--fg);
 }
 
+#set-field-modal .modal-scroll {
+  max-height: 400px;   /* adjust to fit nicely */
+  overflow-y: auto;
+  padding-right: 6px;  /* space for scrollbar */
+  margin-bottom: 12px; /* space before footer */
+}
+
 /* Show the safety button when hidden */
 body.interface-hidden #showControlsBtn { display: inline-block; }
 
@@ -635,98 +642,127 @@ line'></textarea>
       </div>
     </div>
   </div>
-  
-  <!-- Set Field Modal -->
+<!-- Set Field Modal -->
 <div class="overlay" id="set-field-modal">
   <div class="dialog">
     <div class="title">Set Field</div>
-    <div class="hint">Fields are <b>1-based</b>. Apply to the current set (around the caret) or the whole document.</div>
+    <div class="hint">Fields are <b>1-based</b>. Apply to the current set (located at caret) or the whole document.</div>
 
-    <!-- Apply scope -->
-    <!-- Set Field scope -->
-	<div class="divider"></div>
-	<div class="title" style="font-size:14px; margin:0;">Apply to</div>
-	<div class="row">
-	  <div id="setScopeInput" class="scopeInput" contenteditable="true" data-ph="doc or 1, 2, 3…">doc</div>
-	  <small class="hint" style="margin-top:11px;">Type <b>doc</b> for whole document, or a number of set (sets = rows separated by blank lines).</small>
-	</div>
-    <div class="divider"></div>
-    <!-- Op A: target = X when Y = value -->
-    <div class="title" style="font-size:14px;margin-bottom:6px;">Target field = value when other field equals</div>
-    <div class="row">
-      <label>Target field
-        <input type="number" id="sf_target_when" min="1" value="1" style="width:90px;">
-      </label>
-      <label>Value type
-        <select id="sf_val_when_type">
-          <option value="string">String</option>
-          <option value="number">Number</option>
-        </select>
-      </label>
-      <label>Value
-        <input type="text" id="sf_val_when" placeholder="'' or 0">
-      </label>
-      <label>When field
-        <input type="number" id="sf_cond_field" min="1" value="1" style="width:90px;">
-      </label>
-      <label>Equals type
-        <select id="sf_cond_type">
-          <option value="string">String</option>
-          <option value="number">Number</option>
-        </select>
-      </label>
-      <label>Equals
-        <input type="text" id="sf_cond_value" placeholder="match value">
-      </label>
-    </div>
+    <!-- Scrollable tools area -->
+    <div class="modal-scroll" style="max-height:400px; overflow-y:auto; padding-right:6px; margin-bottom:12px;">
+
+      <!-- Apply scope -->
+      <div class="divider"></div>
+      <div class="title" style="font-size:14px; margin:0;">Apply to</div>
+      <div class="row">
+        <div id="setScopeInput" class="scopeInput" contenteditable="true" data-ph="doc or 1, 2, 3…">doc</div>
+        <small class="hint" style="margin-top:11px;">Type <b>doc</b> for whole document, or a number of set (sets = rows separated by blank lines).</small>
+      </div>
+
+      <div class="divider"></div>
+
+      <!-- Op A: target = X when Y = value -->
+      <div class="title" style="font-size:14px;margin-bottom:6px;">Target field = value when other field equals</div>
+      <div class="row">
+        <label>Target field
+          <input type="number" id="sf_target_when" min="1" value="1" style="width:90px;">
+        </label>
+        <label>Value type
+          <select id="sf_val_when_type">
+            <option value="string">String</option>
+            <option value="number">Number</option>
+          </select>
+        </label>
+        <label>Value
+          <input type="text" id="sf_val_when" placeholder="'' or 0">
+        </label>
+        <label>When field
+          <input type="number" id="sf_cond_field" min="1" value="1" style="width:90px;">
+        </label>
+        <label>Equals type
+          <select id="sf_cond_type">
+            <option value="string">String</option>
+            <option value="number">Number</option>
+          </select>
+        </label>
+        <label>Equals
+          <input type="text" id="sf_cond_value" placeholder="match value">
+        </label>
+      </div>
+      <div class="btns">
+        <button id="sf_apply_when" class="primary">Apply</button>
+      </div>
+
+      <div class="divider"></div>
+
+      <!-- Op B: target = X (unconditional) -->
+      <div class="title" style="font-size:14px;margin-bottom:6px;">Target field = value (unconditional)</div>
+      <div class="row">
+        <label>Target field
+          <input type="number" id="sf_target_all" min="1" value="1" style="width:90px;">
+        </label>
+        <label>Value type
+          <select id="sf_val_all_type">
+            <option value="string">String</option>
+            <option value="number">Number</option>
+          </select>
+        </label>
+        <label>Value
+          <input type="text" id="sf_val_all" placeholder="'' or 0">
+        </label>
+      </div>
+      <div class="btns">
+        <button id="sf_apply_all" class="primary">Apply</button>
+      </div>
+
+      <div class="divider"></div>
+
+      <!-- Op C: fields X..Y replaced with a string -->
+      <div class="title" style="font-size:14px;margin-bottom:6px;">Fields X to Y replaced with string field</div>
+      <div class="row">
+        <label>From field
+          <input type="number" id="sf_span_start" min="1" value="1" style="width:90px;">
+        </label>
+        <label>To field
+          <input type="number" id="sf_span_end" min="1" value="2" style="width:90px;">
+        </label>
+        <label>Replacement string
+          <input type="text" id="sf_span_text" placeholder="new value">
+        </label>
+      </div>
+      <div class="btns">
+        <button id="sf_apply_span" class="primary">Apply</button>
+      </div>
+
+      <div class="divider"></div>
+
+      <!-- Op D: increment sequence tool -->
+      <div class="title" style="font-size:14px;margin-bottom:6px;">Increment sequence into field</div>
+      <div class="hint">Sets the chosen field in each row to a running number starting at <b>Start number</b>. Applies to the chosen scope (doc or set #).</div>
+      <div class="row">
+        <label>Field #
+          <input type="number" id="sf_inc_field" min="1" value="1" style="width:90px;">
+        </label>
+        <label>Start number
+          <input type="number" id="sf_inc_start" value="1" style="width:120px;">
+        </label>
+        <label>
+          <input type="checkbox" id="sf_inc_continue">
+          Continue across sets
+        </label>
+      </div>
+      <div class="btns">
+        <button id="sf_apply_inc" class="primary">Apply</button>
+      </div>
+
+    </div><!-- /.modal-scroll -->
+
+    <!-- Fixed footer -->
     <div class="btns">
-      <button id="sf_apply_when" class="primary">Apply</button>
-    </div>
-
-    <div class="divider"></div>
-
-    <!-- Op B: target = X (unconditional) -->
-    <div class="title" style="font-size:14px;margin-bottom:6px;">Target field = value (unconditional)</div>
-    <div class="row">
-      <label>Target field
-        <input type="number" id="sf_target_all" min="1" value="1" style="width:90px;">
-      </label>
-      <label>Value type
-        <select id="sf_val_all_type">
-          <option value="string">String</option>
-          <option value="number">Number</option>
-        </select>
-      </label>
-      <label>Value
-        <input type="text" id="sf_val_all" placeholder="'' or 0">
-      </label>
-    </div>
-    <div class="btns">
-      <button id="sf_apply_all" class="primary">Apply</button>
-    </div>
-
-    <div class="divider"></div>
-
-    <!-- Op C: fields X..Y replaced with a string -->
-    <div class="title" style="font-size:14px;margin-bottom:6px;">Fields X to Y replaced with string field</div>
-    <div class="row">
-      <label>From field
-        <input type="number" id="sf_span_start" min="1" value="1" style="width:90px;">
-      </label>
-      <label>To field
-        <input type="number" id="sf_span_end" min="1" value="2" style="width:90px;">
-      </label>
-      <label>Replacement string
-        <input type="text" id="sf_span_text" placeholder="new value">
-      </label>
-    </div>
-    <div class="btns">
-      <button id="sf_apply_span" class="primary">Apply</button>
       <button id="sf_close">Close</button>
     </div>
   </div>
 </div>
-
   <!-- Settings Modal -->
   <div class="overlay" id="settings-modal">
     <div class="dialog">
@@ -805,7 +841,7 @@ line'></textarea>
           <li><b>Remove n’th Field</b> – removes a 1-based field index from every tuple</li>
           <li><b>Add Field</b> – inserts Number (<code>0</code>) or String (<code>''</code>) after the specified field index</li>
           <li><b>Math</b> – Interfield (Number & Field), Field Math (Field & Number), and Field vs Field → Target</li>
-          <li><b>Copy Board</b> – accepts CSV, lines, or whitespace; includes Dedupe and Shuffle utilities</li>
+          <li><b>Copy Board</b> – accepts CSV, lines, or whitespace; includes Dedupe and Shuffle utilities. Item in double quotes will maintain comma.</li>
         </ul>
       </div>
       <div class="btns">
@@ -813,6 +849,25 @@ line'></textarea>
       </div>
     </div>
   </div>
+  <!-- About Modal -->
+<div class="overlay" id="about-info-modal">
+  <div class="dialog">
+    <div class="title">About SQL Notepad</div>
+    <div class="hint">Software information</div>
+    <div class="about-list">
+      <p><b>Purpose:</b> This software is used to edit tuples with various tools and functions.</p>
+      <p><b>Known limitation:</b> It has problems with apostrophes inside string fields; handle those tuples by hand.</p>
+      <p><b>License:</b> This is MIT licensed software. Use for personal or any commercial uses.</p>
+      <p><b>Credits:</b> Created by Jeremy Benson using GPT5. Created in 2025.</p>
+      <p><b>Disclaimer:</b> Use at your own risk and be watchful of data.</p>
+    </div>
+
+    <div class="btns">
+      <button id="aboutInfoCloseBtn" class="primary">Close</button>
+    </div>
+  </div>
+</div>
+
 <!-- Error Handling Modal -->
 <div class="overlay" id="error-handling-modal" aria-modal="true" role="dialog">
   <div class="dialog">
@@ -1224,6 +1279,111 @@ function enumerateSets(lines) {
   }
   return sets;
 }
+
+// --- Set Field: Increment sequence into field ---
+(function attachSetFieldIncrement() {
+  const scopeEl     = document.getElementById('setScopeInput'); // existing scope input ("doc" or set #)
+  const incFieldInp = document.getElementById('sf_inc_field');
+  const incStartInp = document.getElementById('sf_inc_start');
+  const incBtn      = document.getElementById('sf_apply_inc');
+
+  function parseScope(lines) {
+    // scopeEl is contenteditable; read text content
+    const raw = (scopeEl?.textContent || scopeEl?.innerText || '').trim().toLowerCase();
+    if (!raw || raw === 'doc') return { mode: 'doc' };
+    const n = Number(raw.replace(/[^\d\-]/g, ''));
+    if (Number.isInteger(n) && n >= 1) return { mode: 'set', index1: n };
+    // Fallback: treat invalid as doc
+    return { mode: 'doc' };
+  }
+
+  function setNthFieldInFirstTupleOfLine(line, fieldIndex0, valueStr) {
+    const tuples = findAllTuplesInLineSmart(line);
+    if (!tuples.length) return line; // nothing on this line
+
+    // We apply to the FIRST tuple on the line (row semantics)
+    const t = tuples[0];
+    const before = line.slice(0, t.open);
+    const after  = line.slice(t.close);
+
+    const parts = splitFieldsRobust(t.raw);
+    if (fieldIndex0 < 0 || fieldIndex0 >= parts.length) return line; // out of range, skip
+
+    const targetWasQuoted = isQuoted(parts[fieldIndex0]);
+
+    // Preserve quoting style: if it was quoted, keep quotes
+    parts[fieldIndex0] = targetWasQuoted
+      ? `'${String(valueStr).replace(/'/g, "''")}'`
+      : String(valueStr);
+
+    return before + joinFields(parts) + after;
+  }
+
+  function boundsForScope(lines, scope) {
+    const sets = enumerateSets(lines); // [{start,end}, ...]
+    if (scope.mode === 'doc') {
+      // Return an array of all set ranges
+      return sets;
+    } else {
+      const idx = scope.index1 - 1;
+      if (idx >= 0 && idx < sets.length) return [sets[idx]];
+      return []; // invalid set number -> nothing
+    }
+  }
+
+  function applyIncrement() {
+    const fieldN1 = Number(incFieldInp.value);
+    const startAt = Number(incStartInp.value);
+
+    if (!Number.isInteger(fieldN1) || fieldN1 < 1) {
+      alert('Field # must be an integer ≥ 1.');
+      return;
+    }
+    if (!Number.isFinite(startAt)) {
+      alert('Start number must be a valid number.');
+      return;
+    }
+
+    const content = textArea.value;
+    const lines = content.split(/\r?\n/);
+    const scope = parseScope(lines);
+    const ranges = boundsForScope(lines, scope);
+
+    if (!ranges.length) {
+      alert('No matching set found (check your scope).');
+      return;
+    }
+
+    const fieldIndex0 = fieldN1 - 1;
+
+    // For each targeted set, run a sequence:
+    // Row 1 gets startAt, row 2 gets startAt+1, etc. (only counts lines with a tuple)
+    for (const { start, end } of ranges) {
+      let current = startAt;
+      for (let li = start; li < end; li++) {
+        const line = lines[li];
+        if (!line || !line.trim()) continue;
+
+        // Only increment when the line actually has a tuple
+        const tuples = findAllTuplesInLineSmart(line);
+        if (!tuples.length) continue;
+
+        lines[li] = setNthFieldInFirstTupleOfLine(line, fieldIndex0, current);
+        current += 1;
+      }
+    }
+
+    textArea.value = lines.join('\n');
+    pushSnapshot?.();
+    updateRowsCountPill?.();
+  }
+
+  if (incBtn) {
+    incBtn.addEventListener('click', () => {
+      try { applyIncrement(); } catch (e) { console.error(e); alert('Increment failed. See console for details.'); }
+    });
+  }
+})();
 
 /* ============================
    Keyboard: Collect / Import / Dump / Duplicate / Remove / Token / Undo-Redo / Toggle UI
@@ -2679,9 +2839,20 @@ function closeDupesModal() {
   }
 
   // About does nothing (placeholder)
+  const aboutInfoModal = document.getElementById('about-info-modal');
   const mnuAbout = document.getElementById('mnuAbout');
-  if (mnuAbout){
-    mnuAbout.addEventListener('click', ()=>{ closeAll(); /* no-op for now */ });
+  const aboutInfoClose = document.getElementById('aboutInfoCloseBtn');
+
+  if (mnuAbout && aboutInfoModal) {
+    mnuAbout.addEventListener('click', () => { aboutInfoModal.style.display = 'flex'; });
+  }
+  if (aboutInfoModal) {
+    aboutInfoModal.addEventListener('click', (e) => {
+      if (e.target === aboutInfoModal) aboutInfoModal.style.display = 'none';
+    });
+  }
+  if (aboutInfoClose) {
+    aboutInfoClose.addEventListener('click', () => { aboutInfoModal.style.display = 'none'; });
   }
 
   // Optional: List Extractor stub
@@ -3521,7 +3692,7 @@ document.addEventListener('DOMContentLoaded', () => {
     <!-- Method 1 -->
     <div class="hint" style="margin-top:6px;"><b>Method 1 — Use Copy Board (CSV-aware)</b></div>
     <div class="hint">
-      The <b>current set</b> (block around the caret) becomes a <b>working template</b>.
+      The <b>current set</b> becomes a <b>working template</b>. Keep caret at end of last tuple
       A copy is created for each item in the <b>Copy Board</b>, and that item is placed in the chosen
       <b>n’th field</b> of <em>every row</em> in that copy. All copies are appended to the end of the document.
     </div>
@@ -4434,6 +4605,136 @@ Field → Paste Plugin Script
         if (e.key === 'Enter') { e.preventDefault(); btnApply.click(); }
         if (e.key === 'Escape'){ e.preventDefault(); btnCancel.click(); }
       });
+    }
+  });
+})();
+</script>
+<script id="set-field-increment-plugin">
+/**
+ * Set Field — Increment Sequence Tool
+ * - Uses: #sf_inc_field, #sf_inc_start, #sf_inc_continue, #sf_apply_inc
+ * - Scope source: #setScopeInput ("doc" or set number)
+ * - Writes into the FIRST tuple per non-blank "row" (line) of each targeted set.
+ * - Preserves quoting for the target field: if quoted → stays quoted ('' doubled inside).
+ *
+ * Depends on existing globals/helpers in your app:
+ *   - textArea, pushSnapshot?, updateRowsCountPill?
+ *   - findAllTuplesInLineSmart(line)
+ *   - splitFieldsRobust(tupleRaw), joinFields(parts), isQuoted(str)
+ *   - enumerateSets(lines) → [{start, end}]
+ */
+(function initSetFieldIncrementTool() {
+  // --- Grab modal controls ---
+  const scopeEl      = document.getElementById('setScopeInput');     // contenteditable ("doc" or set #)
+  const incFieldInp  = document.getElementById('sf_inc_field');      // number (1-based)
+  const incStartInp  = document.getElementById('sf_inc_start');      // number (start)
+  const incContChk   = document.getElementById('sf_inc_continue');   // checkbox (continue across sets)
+  const incBtn       = document.getElementById('sf_apply_inc');      // Apply button
+
+  if (!scopeEl || !incFieldInp || !incStartInp || !incBtn) {
+    console.warn('[set-field-increment-plugin] Controls not found — verify Set Field modal HTML.');
+    return;
+  }
+
+  // --- Utilities ---
+  function parseScope(lines) {
+    // #setScopeInput is contenteditable; prefer textContent
+    const raw = (scopeEl.textContent || scopeEl.innerText || '').trim().toLowerCase();
+    if (!raw || raw === 'doc') return { mode: 'doc' };
+    const n = Number(raw.replace(/[^\d\-]/g, ''));
+    if (Number.isInteger(n) && n >= 1) return { mode: 'set', index1: n };
+    return { mode: 'doc' };
+  }
+
+  function boundsForScope(lines, scope) {
+    const sets = enumerateSets(lines); // [{start,end}, ...]
+    if (scope.mode === 'doc') return sets;
+    const idx = scope.index1 - 1;
+    return (idx >= 0 && idx < sets.length) ? [sets[idx]] : [];
+  }
+
+  function setNthFieldInFirstTupleOfLine(line, fieldIndex0, valueStr) {
+    const tuples = findAllTuplesInLineSmart(line);
+    if (!tuples.length) return line; // no tuple on this line
+
+    const t = tuples[0]; // row semantics = first tuple on the line
+    const before = line.slice(0, t.open);
+    const after  = line.slice(t.close);
+
+    const parts = splitFieldsRobust(t.raw);
+    if (fieldIndex0 < 0 || fieldIndex0 >= parts.length) return line; // out of range → no change
+
+    const wasQuoted = isQuoted(parts[fieldIndex0]);
+    parts[fieldIndex0] = wasQuoted
+      ? `'${String(valueStr).replace(/'/g, "''")}'`
+      : String(valueStr);
+
+    return before + joinFields(parts) + after;
+  }
+
+  // --- Main apply handler ---
+  function applyIncrement() {
+    const fieldN1  = Number(incFieldInp.value);
+    const startNum = Number(incStartInp.value);
+    const isCont   = !!(incContChk && incContChk.checked);
+
+    if (!Number.isInteger(fieldN1) || fieldN1 < 1) {
+      alert('Field # must be an integer ≥ 1.');
+      return;
+    }
+    if (!Number.isFinite(startNum)) {
+      alert('Start number must be a valid number.');
+      return;
+    }
+
+    const content = textArea.value;
+    const lines   = content.split(/\r?\n/);
+    const scope   = parseScope(lines);
+    const ranges  = boundsForScope(lines, scope);
+
+    if (!ranges.length) {
+      alert('No matching set found (check your scope).');
+      return;
+    }
+
+    const fieldIndex0 = fieldN1 - 1;
+
+    // currentCounter: if "Continue across sets" is ON and scope is "doc", we keep a single counter.
+    // otherwise we reset per set.
+    let currentCounter = startNum;
+
+    for (let r = 0; r < ranges.length; r++) {
+      const { start, end } = ranges[r];
+
+      // Reset per set unless we are *continuing across sets* (and either scope is doc or user wants it anyway)
+      let localCounter = (isCont ? currentCounter : startNum);
+
+      for (let li = start; li < end; li++) {
+        const line = lines[li];
+        if (!line || !line.trim()) continue; // skip blank lines
+
+        const tuples = findAllTuplesInLineSmart(line);
+        if (!tuples.length) continue;        // only increment on lines with a tuple
+
+        lines[li] = setNthFieldInFirstTupleOfLine(line, fieldIndex0, localCounter);
+        localCounter += 1;
+      }
+
+      // If continuing across sets, carry the updated counter forward
+      if (isCont) currentCounter = localCounter;
+    }
+
+    textArea.value = lines.join('\n');
+    try { pushSnapshot && pushSnapshot(); } catch {}
+    try { updateRowsCountPill && updateRowsCountPill(); } catch {}
+  }
+
+  // --- Wire up button ---
+  incBtn.addEventListener('click', () => {
+    try { applyIncrement(); }
+    catch (err) {
+      console.error('[set-field-increment-plugin] Increment failed:', err);
+      alert('Increment failed. See console for details.');
     }
   });
 })();
