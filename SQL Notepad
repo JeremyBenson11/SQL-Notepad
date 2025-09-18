@@ -930,7 +930,7 @@ line'></textarea>
     <div class="hint">Software information</div>
     <div class="about-list">
       <p><b>Purpose:</b> This software is used to edit tuples with various tools and functions.</p>
-      <p><b>Known limitation:</b> It has problems with apostrophes inside string fields; handle those tuples by hand.</p>
+      <p><b>Known limitation:</b> It will double escape sometimes, watch your escaped apostrophes.</p>
       <p><b>License:</b> This is MIT licensed software. Use for personal or any commercial uses.</p>
       <p><b>Credits:</b> Created by Jeremy Benson using GPT5. Created in 2025.</p>
       <p><b>Disclaimer:</b> Use at your own risk and be watchful of data.</p>
