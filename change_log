@@ -1,3 +1,7 @@
+Sep 18th, 2025
+
+* I've stared a new recode project on this software. Right now everything is getting bug free. SQL Notpad is understanding both apostrophe and backslash escaped apostrophes. When the software is finished I will merge the new file with the old one and clean up here. 
+
 Sep 10th, 2025
 
 * Added numerator to the set field tool.
