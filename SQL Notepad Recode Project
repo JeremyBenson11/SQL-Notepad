@@ -1158,7 +1158,6 @@ Tools → Field → Paste Modal
 </div>
 </div>
 <!-- Helpers: tuple parsing + editor line utilities -->
-<!-- Helpers: tuple parsing + editor line utilities -->
 <script id="helpers-duplicate-line-lib">
 (function(){
   const H = {};
@@ -1283,52 +1282,91 @@ Tools → Field → Paste Modal
   window.DupHelpers = H;
 })();
 </script>
-
-<!-- Feature: Duplicate line hotkeys (Ctrl+Shift+D primary, Ctrl+Alt+D backup; attempt Ctrl+D) -->
-<script id="feature-duplicate-line-hotkey">
+<script id="feature-duplicate-line-hotfix">
 (function(){
-  const ta = document.getElementById("textArea");
-  if (!ta || !window.DupHelpers) return;
+  const ta = document.getElementById('textArea');
+  if (!ta) return;
 
+  // checkbox from Settings
   const isClearLastEnabled = () => {
-    const cb = document.getElementById("clearLastField");
+    const cb = document.getElementById('clearLastField');
     return !!(cb && cb.checked);
   };
 
-  function isOurHotkey(e){
-    const k = (e.key || "").toLowerCase();
-    const ctrl = !!e.ctrlKey;
-    const meta = !!e.metaKey; // mac
-    const alt = !!e.altKey;
-    const shift = !!e.shiftKey;
+  // use your helpers (already loaded in helpers-duplicate-line-lib)
+  const H = window.DupHelpers || {};
+  const parseTuple = H.parseSqlTupleLine || null;
 
-    // Primary: Ctrl+Shift+D (works universally)
-    if (k === "d" && ctrl && shift && !alt && !meta) return "ctrlShiftD";
-    // Backup: Ctrl+Alt+D
-    if (k === "d" && ctrl && alt && !shift && !meta) return "ctrlAltD";
-    // Attempt (may NOT override in most browsers): Ctrl+D
-    if (k === "d" && ctrl && !alt && !shift && !meta) return "ctrlD";
-    // Mac attempt (also reserved): Meta+D
-    if (k === "d" && meta && !ctrl && !alt && !shift) return "metaD";
-
-    return null;
+  // map absolute caret to (lines, lineIndex, column)
+  function getLineIndexAndColumn(text, pos){
+    const lines = text.split(/\r?\n/);
+    let acc = 0;
+    for (let i = 0; i < lines.length; i++){
+      const len = lines[i].length + 1; // include newline
+      if (pos <= acc + len - 1){
+        return { lines, lineIndex: i, column: pos - acc };
+      }
+      acc += len;
+    }
+    return { lines, lineIndex: lines.length - 1, column: lines.at(-1)?.length ?? 0 };
   }
 
-  // Capture early; try to beat default handlers
-  document.addEventListener("keydown", function(e){
-    const which = isOurHotkey(e);
-    if (!which) return;
+  // clear only if the last field is a quoted string; numbers unchanged
+  function clearLastFieldIfString(line){
+    if (!parseTuple) return line;
+    const p = parseTuple(line);
+    if (!p.ok || !p.fields.length) return line;
 
-    // Only when cursor is in the main editor
+    const i = p.fields.length - 1;
+    const last = String(p.fields[i]).trim();
+    const isQuoted = last.startsWith("'") && last.endsWith("'");
+    const isNumeric = /^[+-]?\d+(?:\.\d+)?(?:[eE][+-]?\d+)?$/.test(last);
+
+    if (isQuoted){
+      p.fields[i] = "''";      // empty string
+      return p.reconstructed(p.fields);
+    }
+    // number or other → leave as-is
+    return line;
+  }
+
+  function duplicateCurrentLine(){
+    const pos = ta.selectionStart ?? 0;
+    const { lines, lineIndex, column } = getLineIndexAndColumn(ta.value, pos);
+    const srcLine = lines[lineIndex];
+
+    let dup = srcLine;
+    if (isClearLastEnabled()){
+      dup = clearLastFieldIfString(dup); // uses parser that handles '' and \'
+    }
+
+    // ALWAYS put duplicate on a NEW physical line below
+    lines.splice(lineIndex + 1, 0, dup);
+    ta.value = lines.join('\n');
+
+    // caret → same column on the new duplicate line
+    let startOfNew = 0;
+    for (let i = 0; i <= lineIndex; i++) startOfNew += lines[i].length + 1;
+    const newCaret = startOfNew + Math.min(column, lines[lineIndex + 1].length);
+    ta.setSelectionRange(newCaret, newCaret);
+
+    // optional hooks present in your app
+    try { window.pushSnapshot?.(); } catch(_) {}
+    try { window.updateRowsCountPill?.(); } catch(_) {}
+  }
+
+  // Ctrl+D (capture) — style matches your current file
+  document.addEventListener('keydown', function(e){
+    const k = (e.key || '').toLowerCase();
+    const isOurCombo = (k === 'd' && e.ctrlKey && !e.shiftKey && !e.altKey && !e.metaKey);
+    if (!isOurCombo) return;
     if (document.activeElement !== ta) return;
 
-    // Try to block browser defaults (Ctrl+D/Meta+D still likely reserved)
     e.preventDefault();
     e.stopPropagation();
-    if (typeof e.stopImmediatePropagation === "function") e.stopImmediatePropagation();
+    if (typeof e.stopImmediatePropagation === 'function') e.stopImmediatePropagation();
 
-    DupHelpers.duplicateCurrentLineInTextarea(ta, { clearLast: isClearLastEnabled() });
-
+    duplicateCurrentLine();
   }, true);
 })();
 </script>
@@ -1781,6 +1819,151 @@ Tools → Field → Paste Modal
       document.querySelectorAll(".appmenu-trigger").forEach(b=> { b.classList.remove("is-open"); b.setAttribute("aria-expanded","false"); });
     }
   });
+})();
+</script>
+<!-- Duplicate line: always below + setting-aware string clear (no external deps) -->
+<script id="feature-duplicate-line-hotkey">
+(function(){
+  const ta = document.getElementById('textArea');
+  if (!ta) return;
+
+  // -- setting: checkbox controls whether we clear the last field if it's a string
+  const isClearLastEnabled = () => {
+    const cb = document.getElementById('clearLastField');
+    return !!(cb && cb.checked);
+  };
+
+  // Parse a single SQL tuple on this line.
+  // Supports: leading spaces, (...) with suffix, strings in single quotes with '' and \' escapes.
+  function parseSqlTupleLine(line){
+    const leadingMatch = line.match(/^\s*/);
+    const leading = leadingMatch ? leadingMatch[0] : "";
+    const afterLead = line.slice(leading.length);
+
+    const openRel = afterLead.indexOf("(");
+    if (openRel === -1) return { ok:false };
+
+    const openIdx = leading.length + openRel;
+    const s = line;
+    let i = openIdx + 1;
+    let inStr = false;
+    let cur = "";
+    let fields = [];
+
+    function push(){ fields.push(cur.trim()); cur=""; }
+
+    for (; i < s.length; i++){
+      const ch = s[i];
+
+      if (inStr){
+        if (ch === "\\"){ if (i+1 < s.length){ cur += ch + s[i+1]; i++; continue; } }
+        if (ch === "'"){
+          if (s[i+1] === "'"){ cur += "''"; i++; continue; } // doubled apostrophe
+          cur += ch; inStr = false; continue;
+        }
+        cur += ch; continue;
+      }
+
+      if (ch === "'"){ inStr = true; cur += ch; continue; }
+      if (ch === ","){ push(); continue; }
+      if (ch === ")"){ push(); break; }
+      cur += ch;
+    }
+
+    if (i >= s.length) return { ok:false };
+
+    const closeIdx = i; // index of ')'
+    const suffix = s.slice(closeIdx + 1);
+
+    function reconstructed(newFields){
+      return `${leading}(${newFields.join(", ")})${suffix}`;
+    }
+
+    return { ok:true, fields, reconstructed };
+  }
+
+  // Apply the “clear last if string” rule to the line (numbers unchanged)
+  function clearLastFieldIfString(line){
+    const p = parseSqlTupleLine(line);
+    if (!p.ok || !p.fields.length) return line;
+
+    const lastIdx = p.fields.length - 1;
+    const last = String(p.fields[lastIdx]).trim();
+
+    const isQuoted = last.startsWith("'") && last.endsWith("'");
+    const isNumeric = /^[+-]?\d+(?:\.\d+)?(?:[eE][+-]?\d+)?$/.test(last);
+
+    if (isQuoted){
+      p.fields[lastIdx] = "''";       // strings become empty ''
+    } else if (isNumeric){
+      // numbers: do nothing
+    } else {
+      // non-string, non-number: do nothing per your rule
+    }
+    return p.reconstructed(p.fields);
+  }
+
+  // Robust line/column from caret; returns start/end (end excludes newline) and afterLineBreak
+  function lineInfo(text, pos){
+    const start = text.lastIndexOf("\n", Math.max(0, pos - 1)) + 1;
+    const nlIdx = text.indexOf("\n", start);
+    const end = (nlIdx === -1 ? text.length : nlIdx);
+    const afterLineBreak = (nlIdx === -1 ? end : nlIdx + 1);
+    return { start, end, afterLineBreak };
+  }
+
+  function duplicateCurrentLine(){
+    const text = ta.value;
+    const caret = ta.selectionStart ?? 0;
+    const { start, end, afterLineBreak } = lineInfo(text, caret);
+    const srcLine = text.slice(start, end); // no trailing newline
+    const col = caret - start;
+
+    let dup = srcLine;
+    if (isClearLastEnabled()){
+      dup = clearLastFieldIfString(dup);
+    }
+
+    // Insert strictly AFTER the line's newline, so the duplicate is always on a new line below
+    const before = text.slice(0, afterLineBreak);
+    const after  = text.slice(afterLineBreak);
+    const insertion = dup + "\n";
+
+    ta.value = before + insertion + after;
+
+    // Move caret to duplicate line, same column (clamped)
+    const newLineStart = before.length;
+    const newPos = newLineStart + Math.min(col, dup.length);
+    ta.setSelectionRange(newPos, newPos);
+    ta.focus();
+
+    // Optional hooks if you have them:
+    try { window.pushSnapshot?.(); } catch(_) {}
+    try { window.updateRowsCountPill?.(); } catch(_) {}
+  }
+
+  // Hotkey matcher (use Ctrl+Shift+D reliably; still attempts Ctrl+D where allowed)
+  function isDupHotkey(e){
+    const k = (e.key || '').toLowerCase();
+    if (k !== 'd') return false;
+    if (e.ctrlKey && e.shiftKey && !e.altKey && !e.metaKey) return true; // Ctrl+Shift+D
+    if (e.ctrlKey && !e.shiftKey && !e.altKey && !e.metaKey)  return true; // Ctrl+D (attempt)
+    if (e.ctrlKey && e.altKey && !e.shiftKey && !e.metaKey)   return true; // Ctrl+Alt+D (backup)
+    if (e.metaKey && !e.ctrlKey && !e.shiftKey && !e.altKey)  return true; // ⌘+D (attempt)
+    return false;
+  }
+
+  // Intercept early to beat browser defaults
+  document.addEventListener('keydown', function(e){
+    if (document.activeElement !== ta) return;
+    if (!isDupHotkey(e)) return;
+
+    e.preventDefault();
+    e.stopPropagation();
+    if (typeof e.stopImmediatePropagation === 'function') e.stopImmediatePropagation();
+
+    duplicateCurrentLine();
+  }, true);
 })();
 </script>
 <script id="settings-duplicate-feature">
