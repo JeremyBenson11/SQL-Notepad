@@ -1,5 +1,23 @@
 Sep 18th, 2025
 
+* ctrl+d duplicate line is duplicating lines and remove end fields when setting is set.
+* tokenizer button is generating unique document tokens.
+* Copy Board is recieving a csv list of items and working around double quotes to maintain comma: pizza, sword, "turnover, apple", banana.
+* Copy Board is pasting into every n'th row properly.
+* Copy Board shuffle and dedupe is working.
+* Ctlr+S hotkey and Hide Copyboard button is working. Ctrl+S enters distraction free typing while Hide Copy Board button hides the Copy Board.
+* ctrl+B hotkey is adding highlighted item to the Copy Board.
+* All File menu items are wired.
+* File -> Math is operational.
+* Tools -> Field -> Add Field is operational.
+* Tools -> Field -> Set Field is operational.
+* Tools -> Field -> Append/Prepend is operational.
+* Ctrl+Shift+E duplicate token report is operational.
+* Undo feature implemented with 20 snapshots.
+* Debugger has been removed totally.
+
+Sep 18th, 2025
+
 * I've stared a recode project on this software. Right now everything is getting bug free. SQL Notpad is understanding both apostrophe and backslash escaped apostrophes. When the software is finished I will merge the new file with the old one and clean up here. 
 
 Sep 10th, 2025
