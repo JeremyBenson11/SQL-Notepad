@@ -1,3 +1,7 @@
+Sep 19th, 2025
+
+* Ctrl+K no longer auto escapes backslash escapes with an apostrophe.
+
 Sep 18th, 2025
 
 * ctrl+d duplicate line is duplicating lines and remove end fields when setting is set.
