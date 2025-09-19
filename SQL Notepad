@@ -5374,7 +5374,8 @@ Tools → Field → Paste Modal
     // Locate tuple on caret line
     let tupleOnLine = null;
     if (parseTuple){
-      // Use fallback just to get raw span quickly
+      // If you have a parser that returns raw span, use it; otherwise fallback
+      // to the scanner. Keep fallback behavior identical to before.
       tupleOnLine = findFirstTupleInLine(line);
     } else {
       tupleOnLine = findFirstTupleInLine(line);
@@ -5406,7 +5407,19 @@ Tools → Field → Paste Modal
     const sourceTok = fields[targetFieldIndex];
     const core = unquote(sourceTok).trim();
     const isNum = numericLike(core);
-    const writeToken = isNum ? String(Number(core)) : toSqlString(core);
+
+    // Smart serializer: preserve original backslash-escaped token if present,
+    // otherwise produce canonical SQL-style single-quoted string.
+    function toSqlStringSmart(origTok, valueCore){
+      const orig = String(origTok == null ? '' : origTok).trim();
+      if (/\\'/.test(orig) || /\\\\/.test(orig)) {
+        // preserve user-typed backslash escaping exactly
+        return orig;
+      }
+      return toSqlString(valueCore);
+    }
+
+    const writeToken = isNum ? String(Number(core)) : toSqlStringSmart(sourceTok, core);
 
     // Limit to the CURRENT SET ONLY
     const { start, end } = currentSetBounds(lines, lineIdx); // end is exclusive
