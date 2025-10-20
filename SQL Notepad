@@ -2352,7 +2352,7 @@ Tools → Field → Paste Modal
 
     // ✅ robust 3-arg counter
     const indexInLine = Math.min(Math.max(col, tuple.open+1), Math.max(tuple.open+1, tuple.close-1));
-    const fieldIndex0 = Math.max(0, countCommas3(currentLine, tuple.open, indexInLine) - 1);
+    const fieldIndex0 = countCommas3(currentLine, tuple.open, indexInLine);
 
     const { start, end } = currentSetBounds(lines, lineIndex);
     const items = itemsFromCopyBoard();
