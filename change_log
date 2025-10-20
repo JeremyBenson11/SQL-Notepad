@@ -1,8 +1,3 @@
-Oct 20th, 2025
-
-* Fixed Ctrl+K hotkey, now working on tuple sets within the document instead of first set only.
-* Fixed Ctrl+I Copy Board paste, missing intended field less.
-
 Sep 19th, 2025
 
 * Ctrl+K no longer auto escapes backslash escapes with an apostrophe.
