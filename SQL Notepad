@@ -2273,7 +2273,7 @@ Tools → Field → Paste Modal
     const sets=[]; let i=0;
     while(i<lines.length){
       while(i<lines.length && lines[i].trim()==='') i++;
-      if (i>=lines.length) break;
+      if(i>=lines.length) break;
       const start=i;
       while(i<lines.length && lines[i].trim()!=='') i++;
       sets.push({start, end:i});
@@ -2350,7 +2350,7 @@ Tools → Field → Paste Modal
 
     const tuple = tuplesOnLine.find(T => col >= T.open && col <= T.close) || tuplesOnLine[0];
 
-    // ✅ robust 3-arg counter
+    // ✅ Pass ALL THREE args (line, tuple.open, caret) into your robust counter.
     const indexInLine = Math.min(Math.max(col, tuple.open+1), Math.max(tuple.open+1, tuple.close-1));
     const fieldIndex0 = countCommas3(currentLine, tuple.open, indexInLine);
 
@@ -2381,18 +2381,16 @@ Tools → Field → Paste Modal
     try { window.updateRowsCountPill?.(); } catch {}
   }
 
-  // ------- Hotkey binding (stronger): capture at document level, only when editor has focus -------
-  document.addEventListener('keydown', (e) => {
-    const key = String(e.key || '').toLowerCase();
-    if (document.activeElement !== editor) return;          // only when the textarea is focused
-    if ((e.ctrlKey || e.metaKey) && key === 'i'){           // Shift allowed; blocks DevTools while in editor
+  // Capture-phase handler to beat and silence the old ones
+  editor.addEventListener('keydown', (e) => {
+    const key = String(e.key).toLowerCase();
+    if ((e.ctrlKey || e.metaKey) && key === 'i'){
       e.preventDefault();
       e.stopPropagation();
       e.stopImmediatePropagation?.();
       pasteItemsAtCaretField();
     }
-  }, true); // capture
-
+  }, true);
 })();
 </script>
 <script id="copy-board-paste-fix">
@@ -5260,6 +5258,7 @@ Tools → Field → Paste Modal
 
   // ---------- Small helpers ----------
   function toSqlString(s){ return `'${String(s).replace(/'/g, "''")}'`; }
+  function isQuoted(tok){ return /^\s*'.*'\s*$/.test(String(tok)); }
   function unquote(tok){
     const t = String(tok).trim();
     if (t.startsWith("'") && t.endsWith("'")) return t.slice(1,-1).replace(/''/g,"'");
@@ -5274,14 +5273,13 @@ Tools → Field → Paste Modal
     try { window.updateRowsCountPill?.(); } catch {}
   }
 
-  // caret line info (keeps both lineStart and lineIdx)
   function caretLineInfo(text, caret){
     const lineStart = text.lastIndexOf('\n', Math.max(0, (caret ?? 0) - 1)) + 1;
     const nl = text.indexOf('\n', lineStart);
     const lineEnd = (nl === -1 ? text.length : nl);
     const lineIdx = text.slice(0, lineStart).split('\n').length - 1;
     return { lineIdx, lineStart, lineEnd };
-  } // :contentReference[oaicite:0]{index=0}
+  }
 
   // Set bounds = block of non-blank lines around caret line (end is EXCLUSIVE)
   function currentSetBounds(lines, caretLineIdx){
@@ -5290,9 +5288,9 @@ Tools → Field → Paste Modal
     while (start > 0 && lines[start-1].trim() !== '') start--;
     while (end < lines.length && lines[end].trim() !== '') end++;
     return { start, end };
-  } // :contentReference[oaicite:1]{index=1}
+  }
 
-  // Fallback tuple scanner + splitter (already in your file)
+  // ---------- Tuple scanning (fallback path) ----------
   function findFirstTupleInLine(line){
     let open = -1, depth = 0, inS = false;
     for (let i=0; i<line.length; i++){
@@ -5301,7 +5299,7 @@ Tools → Field → Paste Modal
         if (ch === "\\") { i++; continue; }
         if (ch === "'"){
           const nxt = line[i+1];
-          if (nxt === "'"){ i++; continue; }
+          if (nxt === "'"){ i++; continue; } // '' escape
           inS = false;
         }
         continue;
@@ -5311,102 +5309,122 @@ Tools → Field → Paste Modal
       if (ch === ")"){ depth--; if (depth===0 && open !== -1) return { open, close: i+1, raw: line.slice(open, i+1) }; }
     }
     return null;
-  } // :contentReference[oaicite:2]{index=2}
+  }
 
+  // Split fields inside a single tuple token, tracking spans (start/end indices in the LINE)
   function splitFieldsWithSpans(line, tuple){
-    const raw = tuple.raw;
-    const base = tuple.open; // map tuple-local offsets back to line offsets
-    let fields=[], spans=[];
-    let cur='', inS=false;
-    const s = raw.slice(1, raw.length-1); // inside (...)
-    let fieldStart = base+1;
-    for (let i=0;i<s.length;i++){
-      const ch = s[i];
+    const raw = tuple.raw; // includes ( ... )
+    const inner = raw.slice(1, -1);
+    const fields = [];
+    const spans  = [];
+    let buf = "", inS = false, startInner = 0;
+    for (let i=0; i<inner.length; i++){
+      const ch = inner[i];
       if (inS){
-        if (ch === "\\"){ i++; continue; }
+        buf += ch;
+        if (ch === "\\"){ if (i+1 < inner.length){ buf += inner[++i]; } continue; }
         if (ch === "'"){
-          if (s[i+1] === "'"){ i++; continue; }
+          const nxt = inner[i+1];
+          if (nxt === "'"){ buf += nxt; i++; continue; } // doubled apostrophe
           inS = false;
         }
         continue;
       }
-      if (ch === "'"){ inS = true; continue; }
+      if (ch === "'"){ inS = true; buf += ch; continue; }
       if (ch === ","){
-        spans.push({start: fieldStart, end: base+1+i-1});
-        fields.push(cur);
-        cur=''; fieldStart = base+1+i+1;
+        fields.push(buf);
+        const startInLine = tuple.open + 1 + startInner;
+        spans.push({ start: startInLine, end: startInLine + buf.length });
+        buf = "";
+        startInner = i+1; // after comma
         continue;
       }
-      cur += ch;
+      buf += ch;
     }
-    spans.push({start: fieldStart, end: base+1+s.length-1});
-    fields.push(cur);
-    return { fields, spans, joinFields(arr){ return '(' + arr.join(', ') + ')'; } };
-  } // (your existing variant)
+    // last field
+    fields.push(buf);
+    const startInLine = tuple.open + 1 + startInner;
+    spans.push({ start: startInLine, end: startInLine + buf.length });
 
-  // ---------- Ctrl+K (fixed: use caretCol, not absolute caret) ----------
-  function copyFieldAtCaretToAllRows(){
-    const raw  = ta.value;
+    // helper to rejoin fields to a tuple
+    function joinFields(arr){ return '(' + arr.join(',') + ')'; }
+
+    return { fields, spans, joinFields };
+  }
+
+  // ---------- Ctrl+R: remove current line and collapse ----------
+  function removeCurrentLine(){
+    const text  = ta.value;
     const caret = ta.selectionStart ?? 0;
+    const { lineStart, lineEnd } = caretLineInfo(text, caret);
+    const before = text.slice(0, lineStart);
+    const after  = text.slice(lineEnd + (lineEnd < text.length ? 1 : 0)); // skip the newline if present
+    const newCaret = before.length;
+    writeBack((before + after).replace(/\r/g,'').split('\n'), newCaret);
+  }
 
-    const { lineIdx, lineStart } = caretLineInfo(raw, caret);
-    const lines = raw.replace(/\r/g,'').split('\n');
+  // ---------- Ctrl+K: copy field at caret to same index across CURRENT SET only ----------
+  function copyFieldAtCaretToAllRows(){
+    const text  = ta.value.replace(/\r/g,'');
+    const caret = ta.selectionStart ?? 0;
+    const { lineIdx } = caretLineInfo(text, caret);
+    const lines = text.split('\n');
     const line  = lines[lineIdx] ?? '';
 
-    // column inside the current line
-    const caretCol = Math.max(0, caret - lineStart);
-
-    // find tuple under caret (prefer smart helper if available)
-    let tuple = null;
-    if (typeof findAllTuplesInLineSmart === 'function'){
-      const tuples = findAllTuplesInLineSmart(line);
-      if (!tuples.length) return;
-      tuple = tuples.find(t => caretCol >= t.open && caretCol <= t.close)
-           || (() => {
-                let best = null, bestDist = Infinity;
-                for (const t of tuples){
-                  const mid = t.open + Math.floor((t.close - t.open)/2);
-                  const d = Math.abs(caretCol - mid);
-                  if (d < bestDist){ bestDist = d; best = t; }
-                }
-                return best || tuples[0];
-              })();
+    // Locate tuple on caret line
+    let tupleOnLine = null;
+    if (parseTuple){
+      // If you have a parser that returns raw span, use it; otherwise fallback
+      // to the scanner. Keep fallback behavior identical to before.
+      tupleOnLine = findFirstTupleInLine(line);
     } else {
-      tuple = findFirstTupleInLine(line);
-      if (!tuple) return;
+      tupleOnLine = findFirstTupleInLine(line);
     }
+    if (!tupleOnLine) return;
 
-    const { fields, spans, joinFields } = splitFieldsWithSpans(line, tuple);
+    // Determine which field index caret is in
+    const { fields, spans, joinFields } = splitFieldsWithSpans(line, tupleOnLine);
     if (!fields.length) return;
 
     let targetFieldIndex = -1;
-    for (let i=0;i<spans.length;i++){
+    for (let i=0; i<spans.length; i++){
       const sp = spans[i];
-      if (caretCol >= sp.start && caretCol <= sp.end){ targetFieldIndex = i; break; }
+      if (caret >= sp.start && caret <= sp.end){ targetFieldIndex = i; break; }
     }
     if (targetFieldIndex === -1){
+      // choose nearest field if caret sits exactly on a comma, etc.
       let best=-1, dist=Infinity;
       for (let i=0;i<spans.length;i++){
         const sp=spans[i];
-        const d = (caretCol < sp.start) ? (sp.start - caretCol) : (caretCol > sp.end ? (caretCol - sp.end) : 0);
+        const d = (caret < sp.start) ? sp.start - caret : (caret > sp.end ? caret - sp.end : 0);
         if (d < dist){ dist = d; best = i; }
       }
       targetFieldIndex = best;
     }
     if (targetFieldIndex === -1) return;
 
+    // Decide token to copy (number: unquoted; string: single-quoted with escaping)
     const sourceTok = fields[targetFieldIndex];
     const core = unquote(sourceTok).trim();
     const isNum = numericLike(core);
+
+    // Smart serializer: preserve original backslash-escaped token if present,
+    // otherwise produce canonical SQL-style single-quoted string.
     function toSqlStringSmart(origTok, valueCore){
       const orig = String(origTok == null ? '' : origTok).trim();
-      if (/\\'/.test(orig) || /\\\\/.test(orig)) return orig; // preserve backslash style
+      if (/\\'/.test(orig) || /\\\\/.test(orig)) {
+        // preserve user-typed backslash escaping exactly
+        return orig;
+      }
       return toSqlString(valueCore);
     }
+
     const writeToken = isNum ? String(Number(core)) : toSqlStringSmart(sourceTok, core);
 
-    const { start, end } = currentSetBounds(lines, lineIdx); // end is EXCLUSIVE  :contentReference[oaicite:3]{index=3}
+    // Limit to the CURRENT SET ONLY
+    const { start, end } = currentSetBounds(lines, lineIdx); // end is exclusive
 
+    // Apply within the set
     for (let li = start; li < end; li++){
       const L = lines[li];
       if (!L || !L.includes('(')) continue;
@@ -5428,9 +5446,9 @@ Tools → Field → Paste Modal
         const rebuilt = L.slice(0, t.open) + sf.joinFields(copy) + L.slice(t.close);
         if (rebuilt !== L) lines[li] = rebuilt;
       }
-    } // :contentReference[oaicite:4]{index=4}
+    }
 
-    // keep caret stable
+    // Keep caret stable at original position if possible
     const beforeLen = lines.slice(0, lineIdx).join('\n').length + (lineIdx ? 1 : 0);
     const caretInLine = Math.min(Math.max(0, caret - beforeLen), (lines[lineIdx]||'').length);
     const newCaret = beforeLen + caretInLine;
@@ -5438,7 +5456,7 @@ Tools → Field → Paste Modal
     writeBack(lines, newCaret);
   }
 
-  // ---------- Hotkey wiring (v2) ----------
+  // ---------- Hotkey wiring ----------
   function onKeyDown(e){
     const k = (e.key || '').toLowerCase();
     const cmdOrCtrl = e.ctrlKey || e.metaKey;
@@ -5447,23 +5465,19 @@ Tools → Field → Paste Modal
 
     if (k === 'r'){
       e.preventDefault();
-      e.stopPropagation();
-      if (typeof removeCurrentLine === 'function') removeCurrentLine();
+      removeCurrentLine();
       return;
     }
     if (k === 'k'){
       e.preventDefault();
-      e.stopPropagation();
-      if (typeof e.stopImmediatePropagation === 'function') e.stopImmediatePropagation(); // beat older listeners
-      copyFieldAtCaretToAllRows();
+      copyFieldAtCaretToAllRows(); // now scoped to current set only
       return;
     }
   }
 
-  // Versioned guard so this binds even if an older block already set _hotkeysRK
-  if (!ta._hotkeysRK_v2){
-    ta._hotkeysRK_v2 = true;
-    document.addEventListener('keydown', onKeyDown, true); // capture
+  if (!ta._hotkeysRK){
+    ta._hotkeysRK = true;
+    document.addEventListener('keydown', onKeyDown);
   }
 })();
 </script>
