@@ -111,6 +111,7 @@ Aug 19th, 2025
 7. settings are stored in local storage.
 
 May 19th, 2026
-1. I just noticed that tokenizer will create tokens when an apostrophe is escaped with double apostrophe.
-2. You will get tokens if bob's token is bob''s token, but not bob\'s token.
+1. I just noticed that tokenizer will create tokens when an apostrophe is escaped with double apostrophe or properly with \.
+2. You will get tokens if bob's token is bob''s token or bob\'s, but not bob/'s token.
+3. Just watch data, but for now it seems all features are working.
 
